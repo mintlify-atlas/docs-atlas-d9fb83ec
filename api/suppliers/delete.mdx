@@ -1,0 +1,56 @@
+---
+title: 'Delete Supplier'
+api: 'DELETE /api/suppliers/:id'
+description: 'Delete a supplier by ID'
+---
+
+## Authentication
+
+This endpoint requires JWT authentication.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the supplier to delete
+</ParamField>
+
+## Response
+
+Returns a 204 No Content status on successful deletion.
+
+<RequestExample>
+```bash cURL
+curl --request DELETE \
+  --url https://api.devefficiency.com/api/suppliers/1 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 204
+No Content
+```
+
+```json 401
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 404
+{
+  "error": "Supplier not found"
+}
+```
+
+```json 500
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>

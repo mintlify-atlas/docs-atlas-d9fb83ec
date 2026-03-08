@@ -1,0 +1,115 @@
+---
+title: 'Get Server'
+api: 'GET /api/servers/:id'
+description: 'Retrieve a specific server by ID with associated client information'
+---
+
+## Authentication
+
+This endpoint requires JWT authentication.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the server
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="number">
+  Unique identifier for the server
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Description of the server (max 255 characters, optional)
+</ResponseField>
+
+<ResponseField name="provider" type="string">
+  Cloud or hosting provider name (max 128 characters, optional)
+</ResponseField>
+
+<ResponseField name="host" type="string">
+  Server hostname or IP address (max 128 characters, optional)
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Username for server access (max 128 characters, optional)
+</ResponseField>
+
+<ResponseField name="password" type="string">
+  Password for server access (max 128 characters, optional)
+</ResponseField>
+
+<ResponseField name="rsa" type="string">
+  RSA private key for SSH access (text field, optional)
+</ResponseField>
+
+<ResponseField name="ClientId" type="number">
+  Foreign key reference to the associated client (optional)
+</ResponseField>
+
+<ResponseField name="Client" type="object">
+  Associated client information (included in response)
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  Timestamp when the server was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  Timestamp when the server was last updated
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl --request GET \
+  --url https://api.devefficiency.com/api/servers/1 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "id": 1,
+  "description": "Production Web Server",
+  "provider": "AWS",
+  "host": "ec2-123-45-67-89.compute-1.amazonaws.com",
+  "username": "ubuntu",
+  "password": null,
+  "rsa": "-----BEGIN RSA PRIVATE KEY-----\n...",
+  "ClientId": 5,
+  "Client": {
+    "id": 5,
+    "name": "Acme Corporation",
+    "cnpj": "12.345.678/0001-90"
+  },
+  "createdAt": "2024-01-20T12:00:00.000Z",
+  "updatedAt": "2024-01-20T12:00:00.000Z"
+}
+```
+
+```json 401
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 404
+{
+  "error": "Not Found",
+  "message": "Server not found"
+}
+```
+
+```json 500
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>

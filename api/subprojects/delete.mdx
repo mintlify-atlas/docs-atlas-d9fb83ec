@@ -1,0 +1,57 @@
+---
+title: 'Delete Subproject'
+api: 'DELETE /api/subprojects/:id'
+description: 'Delete a subproject by ID'
+---
+
+## Authentication
+
+This endpoint requires JWT authentication.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the subproject to delete
+</ParamField>
+
+## Response
+
+Returns a 204 No Content status on successful deletion.
+
+<RequestExample>
+```bash cURL
+curl --request DELETE \
+  --url https://api.devefficiency.com/api/subprojects/1 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 204
+No Content
+```
+
+```json 401
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 404
+{
+  "error": "Not Found",
+  "message": "Subproject not found"
+}
+```
+
+```json 500
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>

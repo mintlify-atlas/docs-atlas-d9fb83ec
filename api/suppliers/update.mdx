@@ -1,0 +1,122 @@
+---
+title: 'Update Supplier'
+api: 'PUT /api/suppliers/:id'
+description: 'Update an existing supplier'
+---
+
+## Authentication
+
+This endpoint requires JWT authentication.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the supplier to update
+</ParamField>
+
+## Body Parameters
+
+<ParamField body="name" type="string">
+  Name of the supplier (max 128 characters)
+</ParamField>
+
+<ParamField body="cnpj" type="string">
+  Brazilian company tax ID (CNPJ) - max 20 characters, must be unique
+</ParamField>
+
+<ParamField body="email" type="string">
+  Email address of the supplier - max 128 characters
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Phone number of the supplier - max 20 characters
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="number">
+  Unique identifier for the supplier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Updated name of the supplier
+</ResponseField>
+
+<ResponseField name="cnpj" type="string">
+  Updated CNPJ of the supplier
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Updated email address of the supplier
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  Updated phone number of the supplier
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  Timestamp when the supplier was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  Timestamp when the supplier was last updated
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl --request PUT \
+  --url https://api.devefficiency.com/api/suppliers/1 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "Tech Supplies Inc Updated",
+    "cnpj": "12.345.678/0001-90",
+    "email": "contact.new@techsupplies.com",
+    "phone": "+5511999999998"
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "id": 1,
+  "name": "Tech Supplies Inc Updated",
+  "cnpj": "12.345.678/0001-90",
+  "email": "contact.new@techsupplies.com",
+  "phone": "+5511999999998",
+  "createdAt": "2024-01-05T08:00:00.000Z",
+  "updatedAt": "2024-03-08T16:00:00.000Z"
+}
+```
+
+```json 400
+{
+  "error": "Bad Request",
+  "message": "Invalid data format"
+}
+```
+
+```json 401
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 404
+{
+  "error": "Supplier not found"
+}
+```
+
+```json 500
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>

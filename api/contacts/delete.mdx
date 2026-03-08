@@ -1,0 +1,57 @@
+---
+title: 'Delete Contact'
+api: 'DELETE /api/contacts/:id'
+description: 'Delete a contact by ID'
+---
+
+## Authentication
+
+This endpoint requires JWT authentication.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the contact to delete
+</ParamField>
+
+## Response
+
+Returns a 204 No Content status on successful deletion.
+
+<RequestExample>
+```bash cURL
+curl --request DELETE \
+  --url https://api.devefficiency.com/api/contacts/1 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 204
+No Content
+```
+
+```json 401
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 404
+{
+  "error": "Not Found",
+  "message": "Contact not found"
+}
+```
+
+```json 500
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>

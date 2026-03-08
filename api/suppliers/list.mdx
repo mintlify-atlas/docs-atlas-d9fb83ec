@@ -1,0 +1,89 @@
+---
+title: 'List Suppliers'
+api: 'GET /api/suppliers'
+description: 'Retrieve a list of all suppliers'
+---
+
+## Authentication
+
+This endpoint requires JWT authentication.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="number">
+  Unique identifier for the supplier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Name of the supplier (max 128 characters)
+</ResponseField>
+
+<ResponseField name="cnpj" type="string">
+  Brazilian company tax ID (CNPJ) - max 20 characters, unique (optional)
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Email address of the supplier - max 128 characters (optional)
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  Phone number of the supplier - max 20 characters (optional)
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  Timestamp when the supplier was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  Timestamp when the supplier was last updated
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl --request GET \
+  --url https://api.devefficiency.com/api/suppliers \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+[
+  {
+    "id": 1,
+    "name": "Tech Supplies Inc",
+    "cnpj": "12.345.678/0001-90",
+    "email": "contact@techsupplies.com",
+    "phone": "+5511999999999",
+    "createdAt": "2024-01-05T08:00:00.000Z",
+    "updatedAt": "2024-01-05T08:00:00.000Z"
+  },
+  {
+    "id": 2,
+    "name": "Office Equipment Co",
+    "cnpj": "98.765.432/0001-10",
+    "email": "sales@officeequip.com",
+    "phone": "+5511888888888",
+    "createdAt": "2024-01-08T10:30:00.000Z",
+    "updatedAt": "2024-01-08T10:30:00.000Z"
+  }
+]
+```
+
+```json 401
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 500
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>

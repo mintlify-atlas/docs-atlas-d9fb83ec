@@ -1,0 +1,147 @@
+---
+title: 'Create Server'
+api: 'POST /api/servers'
+description: 'Create a new server entry'
+---
+
+## Authentication
+
+This endpoint requires JWT authentication.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+## Body Parameters
+
+<ParamField body="description" type="string">
+  Description of the server (max 255 characters, optional)
+</ParamField>
+
+<ParamField body="provider" type="string">
+  Cloud or hosting provider name (max 128 characters, optional)
+</ParamField>
+
+<ParamField body="host" type="string">
+  Server hostname or IP address (max 128 characters, optional)
+</ParamField>
+
+<ParamField body="username" type="string">
+  Username for server access (max 128 characters, optional)
+</ParamField>
+
+<ParamField body="password" type="string">
+  Password for server access (max 128 characters, optional)
+</ParamField>
+
+<ParamField body="rsa" type="string">
+  RSA private key for SSH access (text field, optional)
+</ParamField>
+
+<ParamField body="ClientId" type="number">
+  Foreign key reference to associate the server with a client (optional)
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="number">
+  Unique identifier for the created server
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Description of the server
+</ResponseField>
+
+<ResponseField name="provider" type="string">
+  Cloud or hosting provider name
+</ResponseField>
+
+<ResponseField name="host" type="string">
+  Server hostname or IP address
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Username for server access
+</ResponseField>
+
+<ResponseField name="password" type="string">
+  Password for server access
+</ResponseField>
+
+<ResponseField name="rsa" type="string">
+  RSA private key for SSH access
+</ResponseField>
+
+<ResponseField name="ClientId" type="number">
+  Foreign key reference to the associated client
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  Timestamp when the server was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  Timestamp when the server was last updated
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl --request POST \
+  --url https://api.devefficiency.com/api/servers \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "description": "New Production Server",
+    "provider": "Google Cloud",
+    "host": "35.123.45.67",
+    "username": "gcp-admin",
+    "password": "secure_password_123",
+    "rsa": null,
+    "ClientId": 5
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "id": 3,
+  "description": "New Production Server",
+  "provider": "Google Cloud",
+  "host": "35.123.45.67",
+  "username": "gcp-admin",
+  "password": "secure_password_123",
+  "rsa": null,
+  "ClientId": 5,
+  "createdAt": "2024-03-08T15:45:00.000Z",
+  "updatedAt": "2024-03-08T15:45:00.000Z"
+}
+```
+
+```json 400
+{
+  "error": "Bad Request",
+  "message": "Invalid data format"
+}
+```
+
+```json 401
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 404
+{
+  "error": "Not Found",
+  "message": "Client not found"
+}
+```
+
+```json 500
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>

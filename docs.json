@@ -145,6 +145,46 @@
               "api/products/create",
               "api/products/update"
             ]
+          },
+          {
+            "group": "Subprojects",
+            "pages": [
+              "api/subprojects/list",
+              "api/subprojects/get",
+              "api/subprojects/create",
+              "api/subprojects/update",
+              "api/subprojects/delete"
+            ]
+          },
+          {
+            "group": "Contacts",
+            "pages": [
+              "api/contacts/list",
+              "api/contacts/get",
+              "api/contacts/create",
+              "api/contacts/update",
+              "api/contacts/delete"
+            ]
+          },
+          {
+            "group": "Suppliers",
+            "pages": [
+              "api/suppliers/list",
+              "api/suppliers/get",
+              "api/suppliers/create",
+              "api/suppliers/update",
+              "api/suppliers/delete"
+            ]
+          },
+          {
+            "group": "Servers",
+            "pages": [
+              "api/servers/list",
+              "api/servers/get",
+              "api/servers/create",
+              "api/servers/update",
+              "api/servers/delete"
+            ]
           }
         ]
       }

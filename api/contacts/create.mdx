@@ -1,0 +1,127 @@
+---
+title: 'Create Contact'
+api: 'POST /api/contacts'
+description: 'Create a new contact for a client'
+---
+
+## Authentication
+
+This endpoint requires JWT authentication.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication
+</ParamField>
+
+## Body Parameters
+
+<ParamField body="name" type="string" required>
+  Name of the contact (max 128 characters)
+</ParamField>
+
+<ParamField body="email" type="string">
+  Email address of the contact (optional)
+</ParamField>
+
+<ParamField body="number" type="string">
+  Phone number of the contact (optional)
+</ParamField>
+
+<ParamField body="whatsapp" type="string">
+  WhatsApp number of the contact (optional)
+</ParamField>
+
+<ParamField body="ClientId" type="number" required>
+  Foreign key reference to the associated client
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="number">
+  Unique identifier for the created contact
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Name of the contact
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Email address of the contact
+</ResponseField>
+
+<ResponseField name="number" type="string">
+  Phone number of the contact
+</ResponseField>
+
+<ResponseField name="whatsapp" type="string">
+  WhatsApp number of the contact
+</ResponseField>
+
+<ResponseField name="ClientId" type="number">
+  Foreign key reference to the associated client
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  Timestamp when the contact was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  Timestamp when the contact was last updated
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl --request POST \
+  --url https://api.devefficiency.com/api/contacts \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "Alice Johnson",
+    "email": "alice.johnson@example.com",
+    "number": "+1122334455",
+    "whatsapp": "+1122334455",
+    "ClientId": 3
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200
+{
+  "id": 5,
+  "name": "Alice Johnson",
+  "email": "alice.johnson@example.com",
+  "number": "+1122334455",
+  "whatsapp": "+1122334455",
+  "ClientId": 3,
+  "createdAt": "2024-03-08T15:45:00.000Z",
+  "updatedAt": "2024-03-08T15:45:00.000Z"
+}
+```
+
+```json 400
+{
+  "error": "Bad Request",
+  "message": "Name is required"
+}
+```
+
+```json 401
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 404
+{
+  "error": "Not Found",
+  "message": "Client not found"
+}
+```
+
+```json 500
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
