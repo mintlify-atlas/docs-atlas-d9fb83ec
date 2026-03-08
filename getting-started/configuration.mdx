@@ -1,0 +1,359 @@
+---
+title: Configuration
+description: Configure DevEfficiency with environment variables, database settings, and email integration
+---
+
+DevEfficiency uses environment variables for configuration. This guide covers all available configuration options and how to set them up properly.
+
+## Environment Variables
+
+All configuration is managed through a `.env` file in the root directory. Copy the example file to get started:
+
+```bash
+cp .env.example .env
+```
+
+## Configuration Reference
+
+### Application Settings
+
+<ParamField path="NODE_ENV" type="string" required>
+  Sets the application environment. Use `production` for production deployments or `development` for local development.
+  
+  ```bash
+  NODE_ENV=production
+  ```
+</ParamField>
+
+<ParamField path="PORT" type="number" required>
+  The port number on which the application will listen for incoming requests.
+  
+  ```bash
+  PORT=3002
+  ```
+  
+  <Info>
+  The application binds to `0.0.0.0` to accept connections from all network interfaces, as configured in `index.ts:11`.
+  </Info>
+</ParamField>
+
+<ParamField path="SECRET" type="string" required>
+  Secret key used for JWT token generation and validation. This should be a strong, random string in production.
+  
+  ```bash
+  SECRET=secret_pass
+  ```
+  
+  <Warning>
+  Change this to a strong, random secret in production. Never use the default value `secret_pass` in a production environment. This secret is critical for authentication security.
+  </Warning>
+</ParamField>
+
+### Database Configuration
+
+DevEfficiency uses MySQL with Sequelize ORM. The database connection is configured in `src/db.ts` using the following environment variables:
+
+<ParamField path="DB_NAME" type="string" required>
+  The name of your MySQL database.
+  
+  ```bash
+  DB_NAME=devefficiency
+  ```
+</ParamField>
+
+<ParamField path="DB_USER" type="string" required>
+  MySQL database user with appropriate permissions.
+  
+  ```bash
+  DB_USER=root
+  ```
+</ParamField>
+
+<ParamField path="DB_PASS" type="string" required>
+  Password for the database user.
+  
+  ```bash
+  DB_PASS=your_secure_password
+  ```
+</ParamField>
+
+<ParamField path="DB_HOST" type="string" required>
+  MySQL server hostname or IP address.
+  
+  ```bash
+  DB_HOST=localhost
+  ```
+  
+  <Info>
+  When using Docker Compose, set this to `mysqldb` (the service name) instead of `localhost`.
+  </Info>
+</ParamField>
+
+#### Database Connection Pool
+
+The application configures a connection pool with the following settings (from `src/db.ts:6-10`):
+
+```typescript
+pool: {
+    max: 5,        // Maximum number of connections
+    min: 0,        // Minimum number of connections
+    idle: 10000,   // Maximum idle time (ms) before releasing
+}
+```
+
+### Email Configuration
+
+DevEfficiency uses Nodemailer for sending emails. Configure your email service with these variables:
+
+<ParamField path="EMAIL_FROM" type="string" required>
+  Email address that will appear as the sender.
+  
+  ```bash
+  EMAIL_FROM=noreply@yourdomain.com
+  ```
+</ParamField>
+
+<ParamField path="EMAIL_NAME" type="string" required>
+  Display name for the email sender.
+  
+  ```bash
+  EMAIL_NAME=DevEfficiency System
+  ```
+</ParamField>
+
+<ParamField path="EMAIL_USER" type="string" required>
+  SMTP authentication username (usually your email address).
+  
+  ```bash
+  EMAIL_USER=user@example.com
+  ```
+</ParamField>
+
+<ParamField path="EMAIL_PASS" type="string" required>
+  SMTP authentication password or app-specific password.
+  
+  ```bash
+  EMAIL_PASS=your_email_password
+  ```
+  
+  <Tip>
+  For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password.
+  </Tip>
+</ParamField>
+
+<ParamField path="EMAIL_HOST" type="string" required>
+  SMTP server hostname.
+  
+  ```bash
+  EMAIL_HOST=smtp.gmail.com
+  ```
+  
+  Common SMTP hosts:
+  - Gmail: `smtp.gmail.com`
+  - Outlook: `smtp-mail.outlook.com`
+  - SendGrid: `smtp.sendgrid.net`
+  - Amazon SES: `email-smtp.us-east-1.amazonaws.com`
+</ParamField>
+
+<ParamField path="EMAIL_CC" type="string" optional>
+  Email address to receive copies of all outgoing emails.
+  
+  ```bash
+  EMAIL_CC=admin@example.com
+  ```
+</ParamField>
+
+## Configuration Examples
+
+<CodeGroup>
+```bash Development
+NODE_ENV=development
+
+PORT=3002
+
+SECRET=dev_secret_key_change_in_production
+
+DB_NAME=devefficiency_dev
+DB_USER=root
+DB_PASS=localpassword
+DB_HOST=localhost
+
+EMAIL_FROM=dev@localhost
+EMAIL_NAME=DevEfficiency Dev
+EMAIL_USER=dev@localhost
+EMAIL_PASS=devpassword
+EMAIL_HOST=localhost
+EMAIL_CC=
+```
+
+```bash Production
+NODE_ENV=production
+
+PORT=3002
+
+SECRET=your_very_strong_random_secret_here_min_32_chars
+
+DB_NAME=devefficiency_prod
+DB_USER=deveff_user
+DB_PASS=strong_database_password
+DB_HOST=mysql.example.com
+
+EMAIL_FROM=noreply@yourdomain.com
+EMAIL_NAME=DevEfficiency
+EMAIL_USER=smtp-user@yourdomain.com
+EMAIL_PASS=smtp_app_password
+EMAIL_HOST=smtp.gmail.com
+EMAIL_CC=admin@yourdomain.com
+```
+
+```bash Docker Compose
+NODE_ENV=production
+
+PORT=3002
+
+SECRET=docker_production_secret_key
+
+DB_NAME=devefficiency
+DB_USER=root
+DB_PASS=mysql_root_password
+DB_HOST=mysqldb
+
+EMAIL_FROM=system@yourdomain.com
+EMAIL_NAME=DevEfficiency System
+EMAIL_USER=smtp@yourdomain.com
+EMAIL_PASS=smtp_password
+EMAIL_HOST=smtp.yourdomain.com
+EMAIL_CC=notifications@yourdomain.com
+```
+</CodeGroup>
+
+## Application Architecture
+
+### Server Configuration
+
+The Fastify server is configured with security and performance features in `src/app.ts`:
+
+```typescript
+// Security headers (src/app.ts:23-26)
+app.register(helmet, {
+    contentSecurityPolicy: false,
+    referrerPolicy: false,
+})
+
+// Rate limiting (src/app.ts:33-36)
+app.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+})
+
+// API routes prefix (src/app.ts:37)
+app.register(routes, { prefix: 'api' })
+```
+
+<Note>
+All API endpoints are automatically prefixed with `/api`. For example, authentication endpoints would be accessible at `/api/auth/*`.
+</Note>
+
+### Database Models
+
+The application uses Sequelize with the following models (from `src/sync.ts`):
+
+- **User Management**: User, Credential
+- **Client Management**: Client, Contact, Address
+- **Project Management**: Project, Subproject, Service_order
+- **Protocols**: Protocol, Protocol_register, Protocol_product
+- **Financial**: Billing, BillingProtocol, Receipts, Payable, BankAccount, BankTransfer
+- **Inventory**: Product, License, Subscription
+- **Infrastructure**: Server, Check
+- **Accounting**: CostCenter, Supplier
+- **Configuration**: Config
+
+## Validation
+
+After configuring your environment variables, validate the configuration:
+
+<Steps>
+  <Step title="Check environment file">
+    Ensure all required variables are set:
+    
+    ```bash
+    cat .env | grep -E '^(NODE_ENV|PORT|SECRET|DB_|EMAIL_)'
+    ```
+  </Step>
+
+  <Step title="Test database connection">
+    Start the application to test the database connection. The Sequelize logging is enabled by default (see `src/db.ts:11`):
+    
+    ```bash
+    npm start
+    ```
+    
+    You should see SQL logs indicating successful connection and model synchronization.
+  </Step>
+
+  <Step title="Verify model synchronization">
+    On first startup, the application runs `syncModels()` (from `index.ts:7`) which creates all necessary database tables using `ALTER` mode to preserve existing data.
+  </Step>
+</Steps>
+
+## Security Best Practices
+
+<Warning>
+**Critical Security Configurations:**
+
+1. **Never commit `.env` files** - Add `.env` to `.gitignore`
+2. **Use strong JWT secrets** - Minimum 32 characters, randomly generated
+3. **Secure database credentials** - Use strong passwords and limited user privileges
+4. **Enable SSL/TLS for database** - In production environments
+5. **Use environment-specific secrets** - Different secrets for dev, staging, and production
+6. **Rotate secrets regularly** - Change JWT secrets and passwords periodically
+</Warning>
+
+<Tip>
+For production deployments, consider using a secrets management service like:
+- AWS Secrets Manager
+- HashiCorp Vault
+- Azure Key Vault
+- Google Cloud Secret Manager
+</Tip>
+
+## Troubleshooting
+
+### Database Connection Issues
+
+If you encounter database connection errors:
+
+1. Verify MySQL is running: `systemctl status mysql`
+2. Check credentials are correct
+3. Ensure the database exists: `SHOW DATABASES;`
+4. Verify user permissions: `SHOW GRANTS FOR 'user'@'host';`
+5. Check firewall rules if using remote database
+
+### Email Configuration Issues
+
+1. Test SMTP credentials with a simple test
+2. Check if your email provider requires app-specific passwords
+3. Verify SMTP port is not blocked by firewall
+4. Enable "Less secure app access" if using Gmail (or use App Passwords)
+
+### Port Already in Use
+
+If the configured port is already in use:
+
+```bash
+# Find process using the port
+lsof -i :3002
+
+# Kill the process or change PORT in .env
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment" icon="rocket" href="/getting-started/deployment">
+    Learn how to deploy DevEfficiency to production
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/auth/login">
+    Explore the API endpoints and authentication
+  </Card>
+</CardGroup>

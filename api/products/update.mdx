@@ -1,0 +1,314 @@
+---
+title: "Update Product"
+api: "PUT /api/products/:id"
+description: "Update an existing product or service"
+---
+
+## Overview
+
+This endpoint updates an existing product's details, including its description, pricing, cost, and license generation settings. Changes to products do not retroactively affect existing protocol-product associations or generated licenses.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Include your JWT token in the format: `Bearer YOUR_JWT_TOKEN`
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique identifier of the product to update
+</ParamField>
+
+## Request Body
+
+<ParamField body="description" type="string" required>
+  Updated product or service description.
+  
+  **Constraints:**
+  - Maximum length: 255 characters
+  - Cannot be null or empty
+  
+  **Impact:**
+  - Updates will be reflected in the product catalog immediately
+  - Does not affect the description in existing protocols that already include this product
+</ParamField>
+
+<ParamField body="value" type="float" required>
+  Updated sale price of the product.
+  
+  **Default:** 0
+  
+  **Impact:**
+  - New price applies to future protocol-product associations
+  - Existing protocol products maintain their original pricing unless explicitly updated
+  - Useful for seasonal pricing, promotions, or market adjustments
+</ParamField>
+
+<ParamField body="coust" type="float" required>
+  Updated cost of the product to your organization.
+  
+  **Default:** 0
+  
+  **Impact:**
+  - Affects profit margin calculations for new sales
+  - Updates financial reporting for future transactions
+  - Historical cost data in existing protocols remains unchanged
+  
+  **Common scenarios:**
+  - Supplier price changes
+  - Updated third-party licensing fees
+  - Changes in operational costs
+</ParamField>
+
+<ParamField body="generate_license" type="boolean" required>
+  Updated license generation setting.
+  
+  **Default:** false
+  
+  **Impact:**
+  - Controls license generation for future protocol associations only
+  - Does not create or remove licenses for existing protocol-product relationships
+  - Can be toggled if product licensing requirements change
+  
+  **Use cases for changing this setting:**
+  - Product transitions from non-licensed to licensed service
+  - Discontinuing license generation for sunset products
+  - Correcting initial configuration errors
+</ParamField>
+
+## Example Request
+
+```bash cURL
+curl --request PUT \
+  --url https://api.devefficiency.com/products/1 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "description": "Enterprise Software License - Updated",
+    "value": 549.99,
+    "coust": 165.00,
+    "generate_license": true
+  }'
+```
+
+```javascript JavaScript
+const productId = 1;
+const response = await fetch(`https://api.devefficiency.com/products/${productId}`, {
+  method: 'PUT',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    description: 'Enterprise Software License - Updated',
+    value: 549.99,
+    coust: 165.00,
+    generate_license: true
+  })
+});
+
+const updatedProduct = await response.json();
+```
+
+```python Python
+import requests
+
+product_id = 1
+headers = {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+}
+
+payload = {
+    'description': 'Enterprise Software License - Updated',
+    'value': 549.99,
+    'coust': 165.00,
+    'generate_license': True
+}
+
+response = requests.put(
+    f'https://api.devefficiency.com/products/{product_id}',
+    headers=headers,
+    json=payload
+)
+
+updated_product = response.json()
+```
+
+## Example Response
+
+```json 200 - Success
+{
+  "id": 1,
+  "description": "Enterprise Software License - Updated",
+  "value": 549.99,
+  "coust": 165.00,
+  "generate_license": true,
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-03-08T14:45:22.000Z"
+}
+```
+
+```json 404 - Not Found
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Product not found"
+}
+```
+
+```json 400 - Bad Request
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Validation failed: description cannot be empty"
+}
+```
+
+```json 401 - Unauthorized
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "message": "Invalid or expired token"
+}
+```
+
+## Response Fields
+
+<ResponseField name="id" type="integer">
+  The product's unique identifier (unchanged)
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  The updated product description
+</ResponseField>
+
+<ResponseField name="value" type="float">
+  The updated sale price
+</ResponseField>
+
+<ResponseField name="coust" type="float">
+  The updated cost
+</ResponseField>
+
+<ResponseField name="generate_license" type="boolean">
+  The updated license generation setting
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  Original creation timestamp (unchanged)
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  Timestamp of this update (ISO 8601 format)
+</ResponseField>
+
+## Common Update Scenarios
+
+### Price Adjustment
+
+Updating pricing due to market changes or promotions:
+
+```json
+{
+  "description": "Professional Services - Senior Developer (Hourly)",
+  "value": 165.00,
+  "coust": 95.00,
+  "generate_license": false
+}
+```
+
+### Cost Update
+
+Adjusting costs due to supplier changes:
+
+```json
+{
+  "description": "Cloud VPS - Standard Plan (Monthly)",
+  "value": 89.99,
+  "coust": 42.00,
+  "generate_license": true
+}
+```
+
+### Product Reconfiguration
+
+Changing license generation behavior:
+
+```json
+{
+  "description": "Legacy Support Package - Deprecated",
+  "value": 299.00,
+  "coust": 100.00,
+  "generate_license": false
+}
+```
+
+### Description Clarification
+
+Improving product naming for better clarity:
+
+```json
+{
+  "description": "DevTools Pro License - Annual (Includes Support)",
+  "value": 1200.00,
+  "coust": 300.00,
+  "generate_license": true
+}
+```
+
+## Important Considerations
+
+### Non-Retroactive Updates
+
+Product updates do not affect existing data:
+
+- **Protocol Products**: Protocols that already include this product retain their original pricing and settings
+- **Generated Licenses**: Existing licenses remain valid and unchanged
+- **Financial Reports**: Historical financial data uses the pricing that was active at the time of transaction
+
+This ensures data integrity and prevents unintended changes to completed transactions.
+
+### Updating Active Products
+
+When updating products that are actively used in protocols:
+
+1. **Check Dependencies**: Consider querying protocol-product relationships before making significant changes
+2. **Communicate Changes**: If pricing changes, notify relevant stakeholders
+3. **Document Reasons**: Keep internal records of why pricing or settings changed
+4. **Version Control**: For major changes, consider creating a new product instead of updating the existing one
+
+### Pricing Strategy
+
+Best practices for price updates:
+
+- **Gradual Changes**: Avoid dramatic price jumps that might confuse clients
+- **Market Research**: Base pricing on competitive analysis and value proposition
+- **Margin Monitoring**: Ensure cost updates maintain healthy profit margins
+- **Seasonal Adjustments**: Consider separate products for promotional periods
+
+## Error Handling
+
+The endpoint validates all fields before updating:
+
+- **Missing Product**: Returns 404 if the product ID doesn't exist
+- **Invalid Description**: Returns 400 if description is empty or exceeds 255 characters
+- **Invalid Token**: Returns 401 if authentication fails
+- **Malformed Data**: Returns 400 if request body is not valid JSON or missing required fields
+
+## Related Endpoints
+
+- [Get Product](/api/products/get) - View current product details before updating
+- [List Products](/api/products/list) - View all products
+- [Create Product](/api/products/create) - Create a new product
+- [Protocol Products](/api/protocols/products) - View how products are used in protocols
+
+## Audit Trail
+
+The `updatedAt` timestamp is automatically updated with each modification, providing a basic audit trail. For comprehensive change tracking, consider implementing application-level logging that captures:
+
+- User who made the change
+- Previous values
+- Reason for change
+- Associated business context

@@ -1,0 +1,226 @@
+---
+title: Installation
+description: Learn how to install and set up DevEfficiency on your system
+---
+
+DevEfficiency is a client management and service tracking system built with Fastify and MySQL. This guide will walk you through the installation process.
+
+## Prerequisites
+
+Before installing DevEfficiency, ensure you have the following prerequisites installed on your system:
+
+- **Node.js 18 or higher** - The application is built and tested with Node.js 18
+- **MySQL 8.4+** - For database storage
+- **npm, yarn, or pnpm** - Package manager of your choice
+- **Docker and Docker Compose** (optional) - For containerized deployment
+
+## Installation Methods
+
+<Tabs>
+  <Tab title="npm">
+    <Steps>
+      <Step title="Clone the repository">
+        First, clone the DevEfficiency repository to your local machine:
+        
+        ```bash
+        git clone <repository-url>
+        cd clientes-dev
+        ```
+      </Step>
+
+      <Step title="Install dependencies">
+        Install all required dependencies using npm:
+        
+        ```bash
+        npm install
+        ```
+        
+        This will install the following key dependencies:
+        
+        **Core Framework:**
+        - `fastify` (^4.24.3) - Fast and low overhead web framework
+        - `@fastify/helmet` (^10.0.2) - Security headers
+        - `@fastify/rate-limit` (^7.6.0) - Rate limiting
+        - `@fastify/static` (^6.6.0) - Static file serving
+        
+        **Database & ORM:**
+        - `mysql2` (^2.3.3) - MySQL client
+        - `sequelize` (^6.25.5) - ORM for database operations
+        - `sequelize-typescript` (^2.1.5) - TypeScript support for Sequelize
+        
+        **Authentication & Security:**
+        - `jsonwebtoken` (^8.5.1) - JWT authentication
+        - `bcrypt` (^5.1.0) - Password hashing
+        
+        **Utilities:**
+        - `dotenv` (^16.0.3) - Environment variable management
+        - `nodemailer` (^6.9.1) - Email sending
+        - `puppeteer` (^19.7.2) - PDF generation and web automation
+        - `moment` (^2.29.4) - Date manipulation
+        - `uuid` (^9.0.1) - Unique ID generation
+      </Step>
+
+      <Step title="Build the application">
+        Compile the TypeScript code to JavaScript:
+        
+        ```bash
+        npm run build
+        ```
+        
+        This command runs `tsc --build` and copies static assets from `./src/public` to `./dist/src`.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="yarn">
+    <Steps>
+      <Step title="Clone the repository">
+        First, clone the DevEfficiency repository to your local machine:
+        
+        ```bash
+        git clone <repository-url>
+        cd clientes-dev
+        ```
+      </Step>
+
+      <Step title="Install dependencies">
+        Install all required dependencies using yarn:
+        
+        ```bash
+        yarn install
+        ```
+      </Step>
+
+      <Step title="Build the application">
+        Compile the TypeScript code to JavaScript:
+        
+        ```bash
+        yarn build
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="pnpm">
+    <Steps>
+      <Step title="Clone the repository">
+        First, clone the DevEfficiency repository to your local machine:
+        
+        ```bash
+        git clone <repository-url>
+        cd clientes-dev
+        ```
+      </Step>
+
+      <Step title="Install dependencies">
+        Install all required dependencies using pnpm:
+        
+        ```bash
+        pnpm install
+        ```
+      </Step>
+
+      <Step title="Build the application">
+        Compile the TypeScript code to JavaScript:
+        
+        ```bash
+        pnpm build
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Docker">
+    <Steps>
+      <Step title="Clone the repository">
+        First, clone the DevEfficiency repository to your local machine:
+        
+        
+        ```bash
+        git clone <repository-url>
+        cd clientes-dev
+        ```
+      </Step>
+
+      <Step title="Build the Docker image">
+        The included Dockerfile uses Node.js 18 slim image and includes Google Chrome for Puppeteer support:
+        
+        ```bash
+        docker build -t devefficiency .
+        ```
+        
+        The Dockerfile performs the following steps:
+        - Starts from `node:18-slim` base image
+        - Installs Google Chrome for Puppeteer PDF generation
+        - Installs npm dependencies
+        - Builds the TypeScript application
+        - Exposes the application on the configured port
+      </Step>
+
+      <Step title="Run with Docker Compose">
+        For a complete setup with MySQL database, use Docker Compose:
+        
+        ```bash
+        docker-compose up -d
+        ```
+        
+        This will start both the application and MySQL database containers. See the [Deployment Guide](/getting-started/deployment) for detailed Docker Compose instructions.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Verify Installation
+
+After installation, verify that all dependencies are correctly installed:
+
+```bash
+node --version  # Should show v18.x.x or higher
+npm list        # Shows all installed dependencies
+```
+
+<Info>
+The application requires Node.js 18 or higher due to TypeScript 5.2.2 compatibility requirements and modern JavaScript features used throughout the codebase.
+</Info>
+
+## Database Setup
+
+Before running the application, you'll need to set up a MySQL database:
+
+<Steps>
+  <Step title="Create MySQL database">
+    Create a new MySQL database for DevEfficiency:
+    
+    ```sql
+    CREATE DATABASE your_database_name;
+    CREATE USER 'your_user'@'localhost' IDENTIFIED BY 'your_password';
+    GRANT ALL PRIVILEGES ON your_database_name.* TO 'your_user'@'localhost';
+    FLUSH PRIVILEGES;
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Copy the example environment file and configure your database credentials:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    See the [Configuration Guide](/getting-started/configuration) for detailed environment variable setup.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/getting-started/configuration">
+    Configure environment variables, database, and email settings
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/getting-started/deployment">
+    Deploy DevEfficiency to production using Docker or manual setup
+  </Card>
+</CardGroup>
+
+<Warning>
+Make sure to properly configure all environment variables before starting the application. The application will fail to start if database credentials or required configurations are missing.
+</Warning>

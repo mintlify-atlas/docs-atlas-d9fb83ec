@@ -1,0 +1,373 @@
+---
+title: Service Order Management
+description: Complete guide to managing service orders from creation to completion
+---
+
+## Overview
+
+Service orders are the core workflow for managing client requests and projects in DevEfficiency. Each service order tracks work from initial evaluation through to completion, with automatic protocol generation for billing and invoicing.
+
+<CardGroup cols={2}>
+  <Card title="Status Workflow" icon="arrow-progress" href="#status-workflow">
+    Track orders through 7 distinct stages
+  </Card>
+  <Card title="PDF Generation" icon="file-pdf" href="#pdf-generation">
+    Generate professional budget PDFs
+  </Card>
+  <Card title="Protocol Integration" icon="link" href="#protocol-integration">
+    Automatic protocol creation and linking
+  </Card>
+  <Card title="Client Association" icon="users" href="#client-association">
+    Link to clients and projects
+  </Card>
+</CardGroup>
+
+## Service Order Structure
+
+Each service order contains the following key fields:
+
+```typescript
+interface ServiceOrder {
+  id: number
+  subject: string              // Order title (max 128 characters)
+  description?: string         // Detailed description
+  status: ServiceOrderStatus   // Current workflow status
+  ProjectId?: number          // Optional project association
+  ClientId: number            // Required client association
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+<Info>
+**Automatic Client Association**: When a ProjectId is provided, the system automatically sets the ClientId from the associated project.
+</Info>
+
+### Status Values
+
+From `src/models/Service_order.ts:66-75`:
+
+```typescript
+status: {
+  type: DataTypes.ENUM,
+  values: [
+    'Em avaliação',
+    'Orçamento enviado',
+    'Na fila',
+    'Em correções',
+    'Pendente',
+    'Finalizado',
+    'Cancelado',
+  ],
+  defaultValue: 'Em avaliação',
+}
+```
+
+## Status Workflow
+
+Service orders progress through a defined lifecycle:
+
+<Accordion title="1. Em avaliação (Default)">
+Initial status when a service order is created. The team is evaluating the request and preparing a quote.
+
+**Actions:**
+- Review client requirements
+- Estimate time and resources
+- Prepare protocol with products/services
+</Accordion>
+
+<Accordion title="2. Orçamento enviado">
+The quote has been prepared and sent to the client for review.
+
+**Actions:**
+- Wait for client approval
+- Answer client questions
+- Adjust quote if needed
+</Accordion>
+
+<Accordion title="3. Na fila">
+Client has approved the quote and work is queued for execution.
+
+**Actions:**
+- Prioritize in work queue
+- Assign to team members
+- Begin development
+</Accordion>
+
+<Accordion title="4. Em correções">
+Work has been completed but requires corrections or adjustments.
+
+**Actions:**
+- Review client feedback
+- Make necessary corrections
+- Resubmit for approval
+</Accordion>
+
+<Accordion title="5. Pendente">
+Work is temporarily on hold pending client input or external dependencies.
+
+**Actions:**
+- Track blocking issues
+- Follow up with client
+- Document pending items
+</Accordion>
+
+<Accordion title="6. Finalizado">
+Work is complete and delivered to client.
+
+**Side Effects:**
+- Associated protocol is automatically set to "Fechado" (Closed)
+- Triggers billing workflow
+</Accordion>
+
+<Accordion title="7. Cancelado">
+Service order has been cancelled.
+
+**Side Effects:**
+- Associated protocol is automatically set to "Cancelado" (Cancelled)
+- No billing generated
+</Accordion>
+
+<Warning>
+**Status Changes**: When updating a service order to "Finalizado" or "Cancelado", the associated protocol status is automatically updated. See `src/controllers/serviceOrdersController.ts:99-100`.
+</Warning>
+
+## Creating a Service Order
+
+Service orders are created through the API with automatic protocol generation:
+
+```typescript
+// From src/controllers/serviceOrdersController.ts:73-87
+POST /service-orders
+
+{
+  "subject": "Website Redesign",
+  "description": "Complete redesign of company website with modern UI",
+  "ProjectId": 5,          // Optional: links to project
+  "ClientId": 10           // Required if no ProjectId
+}
+```
+
+**Automatic Actions:**
+1. Service order is created with status "Em avaliação"
+2. Protocol is automatically created and linked
+3. ClientId is set from project if ProjectId is provided
+
+<Info>
+The `createProtocol()` method is called automatically after service order creation. This ensures every service order has a protocol for billing tracking.
+</Info>
+
+## Updating Service Orders
+
+Update service order details and status:
+
+```typescript
+// From src/controllers/serviceOrdersController.ts:90-109
+PUT /service-orders/:id
+
+{
+  "subject": "Updated Website Redesign",
+  "description": "Updated requirements...",
+  "status": "Na fila"
+}
+```
+
+### Status Update Side Effects
+
+<Tabs>
+  <Tab title="Finalizado">
+  ```typescript
+  // When status is set to "Finalizado"
+  if (status == 'Finalizado') {
+    await protocol?.update({ status: 'Fechado' })
+  }
+  ```
+  
+  The associated protocol is closed, triggering billing generation.
+  </Tab>
+  
+  <Tab title="Cancelado">
+  ```typescript
+  // When status is set to "Cancelado"
+  if (status == 'Cancelado') {
+    await protocol?.update({ status: 'Cancelado' })
+  }
+  ```
+  
+  The associated protocol is cancelled, preventing billing.
+  </Tab>
+</Tabs>
+
+## PDF Generation
+
+Generate professional budget PDFs for service orders:
+
+```typescript
+// From src/controllers/serviceOrdersController.ts:112-163
+GET /service-orders/:id/pdf
+```
+
+**PDF Contents:**
+- Service order details (subject, description)
+- Client information
+- Project association (if applicable)
+- Protocol details with products and services
+- Protocol registers (labor/expenses)
+- Receipt information
+- Company branding from Config
+
+**Technical Implementation:**
+- Uses Puppeteer for PDF generation
+- EJS templating with `budget.ejs`
+- Base64 encoded company logo from Config
+- Automatic filename: `os_{id}_{timestamp}.pdf`
+
+<Note>
+PDF generation includes all protocol products, registers, and receipts at the time of generation. This provides a complete snapshot of the service order for client review.
+</Note>
+
+## Protocol Integration
+
+Every service order has an associated protocol:
+
+```typescript
+// From src/models/Service_order.ts:89-93
+Service_order.hasOne(Protocol, {
+  onDelete: 'RESTRICT',
+})
+
+Protocol.belongsTo(Service_order)
+```
+
+**Protocol Relationship:**
+- One-to-one relationship
+- Protocol is created automatically on service order creation
+- Protocol tracks products, services, and billing
+- Cannot delete service order if protocol exists (RESTRICT)
+
+### Accessing Protocol Data
+
+```typescript
+// Get service order with protocol
+GET /service-orders/:id
+
+// Response includes:
+{
+  "id": 1,
+  "subject": "Website Redesign",
+  "status": "Na fila",
+  "Protocol": {
+    "id": 1,
+    "status": "Em aberto",
+    "Protocol_products": [...],
+    "Protocol_registers": [...],
+    "Receipts": [...]
+  },
+  "Project": {...},
+  "Client": {...}
+}
+```
+
+## Client Association
+
+Service orders must be associated with a client:
+
+<Tabs>
+  <Tab title="Direct Association">
+  ```typescript
+  // Direct client association
+  {
+    "subject": "Security Audit",
+    "ClientId": 10
+  }
+  ```
+  
+  Explicitly set the client for this service order.
+  </Tab>
+  
+  <Tab title="Via Project">
+  ```typescript
+  // Associate via project
+  {
+    "subject": "Feature Addition",
+    "ProjectId": 5
+  }
+  ```
+  
+  ClientId is automatically set from the project's client. From `src/controllers/serviceOrdersController.ts:82`:
+  ```typescript
+  ClientId: project?.ClientId ?? ClientId ?? null
+  ```
+  </Tab>
+</Tabs>
+
+## Querying Service Orders
+
+Filter and paginate service orders:
+
+```typescript
+GET /service-orders?page=1&limit=10&status=Na fila,Em correções&ClientId=10
+```
+
+**Query Parameters:**
+- `page` - Page number (default: 1)
+- `limit` - Items per page (default: 10, use -1 for all)
+- `status` - Comma-separated status values
+- `ClientId` - Filter by client
+- `filter=last_three` - Get only last 3 orders
+
+**Response:**
+```json
+{
+  "data": [...],
+  "total": 45,
+  "page": 1,
+  "limit": 10
+}
+```
+
+<Info>
+**Multiple Status Filtering**: Use comma-separated values to filter by multiple statuses: `?status=Em avaliação,Na fila,Em correções`
+</Info>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Clear Subjects" icon="heading">
+    Use descriptive subjects that clearly identify the work (max 128 chars)
+  </Card>
+  <Card title="Detailed Descriptions" icon="align-left">
+    Include comprehensive requirements and scope in descriptions
+  </Card>
+  <Card title="Status Updates" icon="arrows-rotate">
+    Keep status current to ensure accurate workflow tracking
+  </Card>
+  <Card title="Project Linking" icon="link">
+    Link to projects when work is part of ongoing project maintenance
+  </Card>
+</CardGroup>
+
+## Common Workflows
+
+### New Client Request
+
+1. **Create Service Order** with status "Em avaliação"
+2. **Build Quote** by adding products/services to protocol
+3. **Update Status** to "Orçamento enviado"
+4. **On Approval**, update to "Na fila"
+5. **Complete Work**, update to "Finalizado"
+6. **Protocol Closes** automatically, triggering billing
+
+### Project Enhancement
+
+1. **Create Service Order** with ProjectId
+2. **ClientId is Set** automatically from project
+3. **Link to Project** for context and history
+4. **Follow Standard Workflow** through completion
+
+### Cancellation
+
+1. **Update Status** to "Cancelado"
+2. **Protocol is Cancelled** automatically
+3. **No Billing Generated**
+4. **Service Order Remains** in system for records

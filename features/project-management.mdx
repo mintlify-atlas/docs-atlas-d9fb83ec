@@ -1,0 +1,619 @@
+---
+title: Project Management
+description: Organize work into projects and subprojects
+---
+
+## Overview
+
+Projects are containers for organizing client work in DevEfficiency. Each project belongs to a client and can have multiple subprojects, service orders, and subscriptions. Projects help track ongoing work, maintenance, and deployments.
+
+<CardGroup cols={2}>
+  <Card title="Project Organization" icon="folder-tree" href="#project-structure">
+    Structure and categorize client projects
+  </Card>
+  <Card title="Subprojects" icon="diagram-project" href="#subprojects">
+    Break projects into logical components
+  </Card>
+  <Card title="Project Types" icon="tags" href="#project-types">
+    Categorize by development type
+  </Card>
+  <Card title="Fixed Projects" icon="thumbtack" href="#fixed-projects">
+    Mark important projects for quick access
+  </Card>
+</CardGroup>
+
+## Project Structure
+
+Each project represents a distinct body of work:
+
+```typescript
+interface Project {
+  id: number
+  name: string                  // Project name (required, max 128 chars)
+  url?: string                 // Project URL or repository
+  fixed: boolean               // Pin to favorites (default: false)
+  type?: ProjectType          // Development type category
+  ClientId: number            // Owner client (required)
+  ServerId?: number           // Hosting server
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Creating Projects
+
+From `src/controllers/projectsController.ts:42-48`:
+
+```typescript
+POST /projects
+
+{
+  "name": "E-commerce Platform",
+  "url": "https://github.com/acme/ecommerce",
+  "type": "WebSite",
+  "ClientId": 10,
+  "ServerId": 5
+}
+```
+
+**Automatic Actions:**
+- Project is associated with client
+- Client relationship is established
+- Project becomes available for service orders
+
+<Info>
+**Client Association**: Projects are created through the client for proper relationship management. The client's `createProject()` method is used internally.
+</Info>
+
+## Project Types
+
+Categorize projects by development type:
+
+### Available Types
+
+From `src/models/Project.ts:81-84`:
+
+```typescript
+type: {
+  type: DataTypes.ENUM,
+  values: ['API', 'Bot', 'WebSite', 'Automação', 'Crawler', 'Outros'],
+}
+```
+
+<Accordion title="API">
+**Backend API Services**
+
+**Characteristics:**
+- RESTful or GraphQL APIs
+- Microservices
+- Backend systems
+- Data services
+
+**Common Subprojects:**
+- Authentication service
+- Data API
+- Payment integration
+</Accordion>
+
+<Accordion title="Bot">
+**Automated Bots**
+
+**Characteristics:**
+- Telegram/Discord bots
+- Chatbots
+- Automated assistants
+- Integration bots
+
+**Common Subprojects:**
+- Bot backend
+- Command handlers
+- Integration modules
+</Accordion>
+
+<Accordion title="WebSite">
+**Websites and Web Applications**
+
+**Characteristics:**
+- Corporate websites
+- E-commerce platforms
+- Web applications
+- Landing pages
+
+**Common Subprojects:**
+- Frontend
+- Backend/API
+- Admin panel
+</Accordion>
+
+<Accordion title="Automação">
+**Automation Systems**
+
+**Characteristics:**
+- Process automation
+- Task schedulers
+- Workflow automation
+- Integration systems
+
+**Common Subprojects:**
+- Automation engine
+- Scheduling system
+- Notification service
+</Accordion>
+
+<Accordion title="Crawler">
+**Web Scrapers and Crawlers**
+
+**Characteristics:**
+- Data extraction
+- Web scraping
+- Content aggregation
+- Data collection
+
+**Common Subprojects:**
+- Scraper engine
+- Data processor
+- Storage system
+</Accordion>
+
+<Accordion title="Outros">
+**Other Project Types**
+
+**Characteristics:**
+- Custom solutions
+- Specialized systems
+- Hybrid projects
+- Uncategorized work
+
+**Use Case:**
+Projects that don't fit standard categories.
+</Accordion>
+
+## Subprojects
+
+Break projects into logical components:
+
+### Subproject Structure
+
+```typescript
+interface Subproject {
+  id: number
+  name: string                  // Subproject name (required, max 128 chars)
+  url: string                  // Repository or URL (required)
+  type: SubprojectType        // Component type (required)
+  ProjectId: number           // Parent project (required)
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Subproject Types
+
+From `src/models/Subproject.ts:42-45`:
+
+```typescript
+type: {
+  type: DataTypes.ENUM,
+  values: ['Front-End', 'Back-End', 'Bot', 'Outros'],
+  allowNull: false,
+}
+```
+
+<Tabs>
+  <Tab title="Front-End">
+  **User Interface Components**
+  
+  ```typescript
+  {
+    "name": "Customer Portal",
+    "url": "https://github.com/acme/portal-frontend",
+    "type": "Front-End",
+    "ProjectId": 1
+  }
+  ```
+  
+  **Examples:**
+  - React/Vue/Angular applications
+  - Mobile apps
+  - User dashboards
+  - Admin interfaces
+  </Tab>
+  
+  <Tab title="Back-End">
+  **Server-Side Components**
+  
+  ```typescript
+  {
+    "name": "API Server",
+    "url": "https://github.com/acme/portal-api",
+    "type": "Back-End",
+    "ProjectId": 1
+  }
+  ```
+  
+  **Examples:**
+  - API servers
+  - Database services
+  - Business logic
+  - Authentication systems
+  </Tab>
+  
+  <Tab title="Bot">
+  **Bot Components**
+  
+  ```typescript
+  {
+    "name": "Notification Bot",
+    "url": "https://github.com/acme/notify-bot",
+    "type": "Bot",
+    "ProjectId": 1
+  }
+  ```
+  
+  **Examples:**
+  - Telegram bots
+  - Discord bots
+  - Automation bots
+  - Integration bots
+  </Tab>
+  
+  <Tab title="Outros">
+  **Other Components**
+  
+  ```typescript
+  {
+    "name": "Data Migration Scripts",
+    "url": "https://github.com/acme/migration",
+    "type": "Outros",
+    "ProjectId": 1
+  }
+  ```
+  
+  **Examples:**
+  - Database migrations
+  - Deployment scripts
+  - Testing infrastructure
+  - Documentation sites
+  </Tab>
+</Tabs>
+
+### Relationship
+
+```typescript
+// From src/models/Project.ts:94-96
+Project.hasMany(Subproject, {
+  onDelete: 'RESTRICT',
+})
+```
+
+<Warning>
+**Delete Protection**: Cannot delete a project if subprojects exist. Remove subprojects first or change deletion approach.
+</Warning>
+
+## Fixed Projects
+
+Pin important projects for quick access:
+
+```typescript
+// From src/models/Project.ts:77-80
+fixed: {
+  type: DataTypes.BOOLEAN,
+  defaultValue: false,
+}
+```
+
+### Marking as Fixed
+
+```typescript
+PUT /projects/:id
+
+{
+  "fixed": true
+}
+```
+
+### Filtering Fixed Projects
+
+From `src/controllers/projectsController.ts:20-31`:
+
+```typescript
+GET /projects?filter=fixed
+
+// Returns only pinned projects
+[
+  {
+    "id": 1,
+    "name": "E-commerce Platform",
+    "fixed": true,
+    "Client": {...}
+  }
+]
+```
+
+**Use Cases:**
+- High-priority projects
+- Active maintenance contracts
+- Frequently accessed projects
+- Dashboard favorites
+
+<Info>
+**Quick Access**: Fixed projects appear first in lists and can be filtered for dashboard displays.
+</Info>
+
+## Updating Projects
+
+Update project information:
+
+```typescript
+// From src/controllers/projectsController.ts:51-60
+PUT /projects/:id
+
+{
+  "name": "E-commerce Platform v2",
+  "url": "https://github.com/acme/ecommerce-v2",
+  "type": "WebSite",
+  "fixed": true,
+  "ServerId": 7
+}
+```
+
+**Editable Fields:**
+- `name` - Project display name
+- `url` - Repository or project URL
+- `type` - Project category
+- `fixed` - Pin status
+- `ServerId` - Hosting server
+
+## Viewing Projects
+
+### Project Details
+
+From `src/controllers/projectsController.ts:34-39`:
+
+```typescript
+GET /projects/:id
+
+// Complete project context
+{
+  "id": 1,
+  "name": "E-commerce Platform",
+  "url": "https://github.com/acme/ecommerce",
+  "type": "WebSite",
+  "fixed": true,
+  "Client": {
+    "id": 10,
+    "name": "Acme Corporation"
+  },
+  "Subprojects": [
+    {
+      "id": 1,
+      "name": "Frontend",
+      "type": "Front-End",
+      "url": "https://github.com/acme/ecommerce-frontend"
+    },
+    {
+      "id": 2,
+      "name": "API",
+      "type": "Back-End",
+      "url": "https://github.com/acme/ecommerce-api"
+    }
+  ],
+  "Service_orders": [...],
+  "Checks": [...],
+  "Subscription": [...]
+}
+```
+
+**Included Data:**
+- Subprojects
+- Service orders
+- Health checks
+- Subscriptions
+- Client information
+
+## Project Relationships
+
+Projects connect to multiple entities:
+
+### Related Entities
+
+```typescript
+// From src/models/Project.ts:94-112
+Project.hasMany(Subproject)       // Project components
+Project.hasMany(Service_order)    // Work requests
+Project.hasMany(Check)            // Health monitoring
+Project.hasMany(Subscription)     // Recurring services
+Project.belongsTo(Client)         // Owner client
+Project.belongsTo(Server)         // Hosting server
+```
+
+### Service Order Integration
+
+Projects link to service orders:
+
+```typescript
+// Create service order for project
+POST /service-orders
+
+{
+  "subject": "Add payment gateway",
+  "description": "Integrate Stripe payment processing",
+  "ProjectId": 1  // Automatically sets ClientId from project
+}
+```
+
+From `src/controllers/serviceOrdersController.ts:76-82`:
+```typescript
+let project = ProjectId ? await Project.findByPk(ProjectId) : undefined
+
+const os = await Service_order.create({
+  subject,
+  description,
+  ProjectId,
+  ClientId: project?.ClientId ?? ClientId ?? null,
+})
+```
+
+<Note>
+**Automatic Client Linking**: When creating service orders with a ProjectId, the ClientId is automatically set from the project.
+</Note>
+
+### Subscription Integration
+
+Projects can have recurring subscriptions:
+
+```typescript
+{
+  "id": 1,
+  "name": "E-commerce Platform",
+  "Subscription": [
+    {
+      "id": 1,
+      "name": "Monthly Maintenance",
+      "value": 500.00,
+      "type": "recurring"
+    }
+  ]
+}
+```
+
+## Server Association
+
+Link projects to hosting servers:
+
+```typescript
+{
+  "name": "E-commerce Platform",
+  "ServerId": 5,
+  "url": "https://ecommerce.acme.com"
+}
+```
+
+**Benefits:**
+- Track where projects are hosted
+- Monitor server resources
+- Manage deployments
+- Access server credentials
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Descriptive Names" icon="tag">
+    Use clear project names that identify the work and client
+  </Card>
+  <Card title="Accurate Types" icon="sitemap">
+    Select appropriate project types for better organization
+  </Card>
+  <Card title="Use Subprojects" icon="folder-tree">
+    Break complex projects into logical subprojects
+  </Card>
+  <Card title="Keep URLs Updated" icon="link">
+    Maintain current repository and deployment URLs
+  </Card>
+</CardGroup>
+
+## Common Workflows
+
+### New Project Setup
+
+1. **Create Project**
+   ```typescript
+   POST /projects
+   { "name": "New Platform", "ClientId": 10, "type": "WebSite" }
+   ```
+
+2. **Add Subprojects**
+   ```typescript
+   POST /subprojects
+   { "name": "Frontend", "ProjectId": 1, "type": "Front-End", "url": "..." }
+   
+   POST /subprojects
+   { "name": "API", "ProjectId": 1, "type": "Back-End", "url": "..." }
+   ```
+
+3. **Link to Server**
+   ```typescript
+   PUT /projects/1
+   { "ServerId": 5 }
+   ```
+
+4. **Create Initial Service Order**
+   ```typescript
+   POST /service-orders
+   { "subject": "Initial Development", "ProjectId": 1 }
+   ```
+
+### Project Maintenance
+
+1. **Create Maintenance Service Order**
+   ```typescript
+   POST /service-orders
+   { "subject": "Bug fixes", "ProjectId": 1 }
+   ```
+
+2. **Track Work** through service order status
+3. **Bill Client** when work is complete
+4. **Update Project** information as needed
+
+### Project Organization
+
+1. **List All Projects**
+   ```typescript
+   GET /projects
+   ```
+
+2. **Filter by Client**
+   ```typescript
+   GET /clients/:id  // Includes projects
+   ```
+
+3. **View Fixed Projects**
+   ```typescript
+   GET /projects?filter=fixed
+   ```
+
+4. **Pin Important Projects**
+   ```typescript
+   PUT /projects/:id
+   { "fixed": true }
+   ```
+
+### Multi-Component Project
+
+**Example: E-commerce Platform**
+
+```typescript
+// Main Project
+{
+  "name": "E-commerce Platform",
+  "type": "WebSite",
+  "ClientId": 10
+}
+
+// Subprojects
+[
+  {
+    "name": "Customer Frontend",
+    "type": "Front-End",
+    "url": "github.com/acme/store-frontend"
+  },
+  {
+    "name": "Admin Dashboard",
+    "type": "Front-End",
+    "url": "github.com/acme/store-admin"
+  },
+  {
+    "name": "REST API",
+    "type": "Back-End",
+    "url": "github.com/acme/store-api"
+  },
+  {
+    "name": "Payment Bot",
+    "type": "Bot",
+    "url": "github.com/acme/payment-bot"
+  }
+]
+```
+
+<Info>
+**Logical Organization**: This structure clearly separates concerns and makes it easy to track work on individual components while maintaining the overall project context.
+</Info>

@@ -1,0 +1,673 @@
+---
+title: Financial Management
+description: Comprehensive financial tracking, reporting, and management
+---
+
+## Overview
+
+DevEfficiency provides complete financial management capabilities including bank accounts, payables, cost centers, bank transfers, and detailed financial reporting. Track all financial transactions and generate comprehensive reports for business intelligence.
+
+<CardGroup cols={2}>
+  <Card title="Bank Accounts" icon="building-columns" href="#bank-accounts">
+    Manage multiple accounts and balances
+  </Card>
+  <Card title="Payables" icon="money-bill" href="#payables">
+    Track and manage expenses
+  </Card>
+  <Card title="Cost Centers" icon="folder-tree" href="#cost-centers">
+    Organize expenses by category
+  </Card>
+  <Card title="Financial Reports" icon="chart-line" href="#financial-reporting">
+    DRE and expense reports
+  </Card>
+</CardGroup>
+
+## Bank Accounts
+
+Manage bank accounts and track balances:
+
+### Account Structure
+
+```typescript
+interface BankAccount {
+  id: number
+  name: string                  // Account name (required, max 128 chars)
+  bank?: string                // Bank name (max 128 chars)
+  agency?: string              // Branch/agency number (max 20 chars)
+  accountNumber?: string       // Account number (max 20 chars)
+  balance: number              // Current balance (default: 0.0)
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Creating Bank Accounts
+
+```typescript
+POST /bank-accounts
+
+{
+  "name": "Business Checking",
+  "bank": "Banco do Brasil",
+  "agency": "1234-5",
+  "accountNumber": "12345-6",
+  "balance": 10000.00
+}
+```
+
+<Info>
+**Balance Tracking**: Balances are automatically updated when payables are paid or transfers are made through the system.
+</Info>
+
+### Bank Transfers
+
+Transfer funds between accounts:
+
+```typescript
+interface BankTransfer {
+  id: number
+  sourceAccountId: number      // Account funds come from
+  destinationAccountId: number // Account funds go to
+  amount: number               // Transfer amount
+  date: Date                   // Transfer date
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+**Creating Transfers:**
+```typescript
+POST /bank-transfers
+
+{
+  "sourceAccountId": 1,
+  "destinationAccountId": 2,
+  "amount": 5000.00,
+  "date": "2026-03-08"
+}
+```
+
+**Automatic Balance Updates:**
+- Source account balance is decreased
+- Destination account balance is increased
+- Both transactions appear in financial history
+
+**Financial History Integration:**
+From `src/controllers/financialsController.ts:78-107`, transfers appear as paired transactions:
+
+```typescript
+const formattedBankTransfers: Transaction[] = bankTransfers.flatMap((t) => [
+  {
+    date: moment(t.date).subtract(1, 'minute').toDate(),
+    description: `${SourceAccount.name}: Transferência para ${DestinationAccount.name}`,
+    value: -Math.abs(t.amount),
+    type: 'outflow',
+    relatedTo: 'Transferência entre contas',
+    showInSummary: false,  // Excluded from totals to prevent double-counting
+  },
+  {
+    date: t.date,
+    description: `${DestinationAccount.name}: Recebimento de ${SourceAccount.name}`,
+    value: Math.abs(t.amount),
+    type: 'inflow',
+    relatedTo: 'Transferência entre contas',
+    showInSummary: false,
+  },
+])
+```
+
+<Warning>
+**Exclude from Summaries**: Transfer transactions have `showInSummary: false` to prevent double-counting in financial totals since they're internal movements.
+</Warning>
+
+## Payables
+
+Track expenses and payments to suppliers:
+
+### Payable Structure
+
+```typescript
+interface Payable {
+  id: number
+  description: string           // Expense description (required)
+  value: number                // Amount (required)
+  dueDate: Date                // Payment due date (required)
+  paymentDate?: Date           // Actual payment date
+  status: PayableStatus        // Payment status
+  SupplierId: number           // Supplier/vendor
+  BankAccountId?: number       // Payment account
+  CostCenterId?: number        // Cost category
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Payable Status
+
+From `src/models/Payable.ts:53-56`:
+
+```typescript
+status: {
+  type: DataTypes.ENUM('pendente', 'pago', 'atrasado', 'cancelado'),
+  defaultValue: 'pendente',
+  allowNull: false,
+}
+```
+
+<Tabs>
+  <Tab title="pendente">
+  **Pending Payment**: Expense is recorded but not yet paid.
+  
+  **Characteristics:**
+  - Default status
+  - `paymentDate` is null
+  - Can be edited
+  - Appears in upcoming payments
+  </Tab>
+  
+  <Tab title="pago">
+  **Paid**: Payment has been made.
+  
+  **Characteristics:**
+  - `paymentDate` is set
+  - Bank account balance updated (via hooks)
+  - Included in expense reports
+  - Cannot be easily modified
+  
+  **Automatic Actions:**
+  From `src/models/Payable.ts:79-80`, hooks trigger balance updates.
+  </Tab>
+  
+  <Tab title="atrasado">
+  **Overdue**: Payment is past due date.
+  
+  **Characteristics:**
+  - Due date has passed
+  - Still unpaid
+  - Requires attention
+  - May incur penalties
+  </Tab>
+  
+  <Tab title="cancelado">
+  **Cancelled**: Expense was cancelled.
+  
+  **Characteristics:**
+  - Not paid
+  - Excluded from reports
+  - Record preserved
+  </Tab>
+</Tabs>
+
+### Creating Payables
+
+```typescript
+POST /payables
+
+{
+  "description": "Office rent - March 2026",
+  "value": 3000.00,
+  "dueDate": "2026-03-10",
+  "SupplierId": 5,
+  "BankAccountId": 1,
+  "CostCenterId": 10
+}
+```
+
+**Automatic Actions:**
+From `src/models/Payable.ts:79`, hooks are triggered:
+- `afterCreate` - Record created
+- `afterUpdate` - Status changes, balance updates
+- `afterDestroy` - Cleanup
+
+### Paying Expenses
+
+```typescript
+PUT /payables/:id
+
+{
+  "status": "pago",
+  "paymentDate": "2026-03-08"
+}
+```
+
+**Side Effects:**
+1. Payable status updated to "pago"
+2. Bank account balance decreased (via hooks)
+3. Transaction appears in financial history
+4. Included in expense reports
+
+## Cost Centers
+
+Organize expenses into categories:
+
+### Cost Center Structure
+
+```typescript
+interface CostCenter {
+  id: number
+  name: string                  // Category name (required, max 128 chars)
+  description?: string         // Category description
+  ParentId?: number            // Parent cost center for hierarchy
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Hierarchical Organization
+
+Cost centers support parent-child relationships:
+
+```typescript
+// From src/models/CostCenter.ts:66-67
+CostCenter.hasMany(CostCenter, { 
+  as: 'children', 
+  foreignKey: 'ParentId', 
+  onDelete: 'CASCADE' 
+})
+CostCenter.belongsTo(CostCenter, { 
+  as: 'parent', 
+  foreignKey: 'ParentId' 
+})
+```
+
+**Example Hierarchy:**
+```
+Marketing (Parent)
+├── Digital Advertising
+├── Content Creation
+└── Events
+
+Operations (Parent)
+├── Office Expenses
+├── Equipment
+└── Utilities
+```
+
+### Creating Cost Centers
+
+<Tabs>
+  <Tab title="Root Level">
+  ```typescript
+  POST /cost-centers
+  
+  {
+    "name": "Marketing",
+    "description": "Marketing and advertising expenses"
+  }
+  ```
+  
+  Create top-level cost center.
+  </Tab>
+  
+  <Tab title="Child Level">
+  ```typescript
+  POST /cost-centers
+  
+  {
+    "name": "Digital Advertising",
+    "description": "Online ads and PPC campaigns",
+    "ParentId": 1  // Under Marketing
+  }
+  ```
+  
+  Create nested cost center under a parent.
+  </Tab>
+</Tabs>
+
+<Info>
+**Cascade Delete**: Deleting a parent cost center automatically deletes all child cost centers. Use carefully!
+</Info>
+
+## Financial Reporting
+
+Generate comprehensive financial reports:
+
+### Financial History
+
+View complete transaction history:
+
+```typescript
+GET /financials?startDate=2026-03-01&endDate=2026-03-31
+```
+
+**Response Structure:**
+From `src/controllers/financialsController.ts:11-19`:
+
+```typescript
+interface Transaction {
+  date: Date
+  description: string
+  value: number                // Positive for inflows, negative for outflows
+  type: 'inflow' | 'outflow'
+  relatedTo: string           // Related entity (supplier, client, etc)
+  bankAccountId?: number
+  showInSummary?: boolean     // Include in totals (excludes transfers)
+}
+```
+
+**Included Transactions:**
+1. **Outflows** (from `src/controllers/financialsController.ts:38-64`)
+   - Paid payables
+   - Bank transfers (outgoing)
+
+2. **Inflows** (from `src/controllers/financialsController.ts:47-75`)
+   - Client receipts
+   - Bank transfers (incoming)
+
+**Example Response:**
+```json
+[
+  {
+    "date": "2026-03-08",
+    "description": "Office rent - March 2026",
+    "value": -3000.00,
+    "type": "outflow",
+    "relatedTo": "Property Management Inc",
+    "showInSummary": true
+  },
+  {
+    "date": "2026-03-08",
+    "description": "Payment for website development",
+    "value": 5000.00,
+    "type": "inflow",
+    "relatedTo": "Website Redesign",
+    "showInSummary": true
+  }
+]
+```
+
+### DRE Report
+
+Generate Demonstração do Resultado do Exercício (Income Statement):
+
+```typescript
+GET /dre?month=3&year=2026
+```
+
+**Report Structure:**
+From `src/controllers/dreReportController.ts:13-25`:
+
+```typescript
+interface DREVolumes {
+  revenue: number                // Total revenue from receipts
+  directCosts: {
+    productCosts: number         // Product costs from protocols
+    serviceExpenses: number      // Service expenses from protocol registers
+  }
+  operatingExpenses: {
+    total: number                // Total operating expenses
+    byCostCenter: [              // Breakdown by cost center
+      { name: string, value: number }
+    ]
+  }
+  grossProfit: number           // Revenue - Direct Costs
+  netResult: number             // Gross Profit - Operating Expenses
+}
+```
+
+**Calculation Logic:**
+
+<Accordion title="1. Revenue Calculation">
+From `src/controllers/dreReportController.ts:36-46`, total from receipts where protocols were closed in the period:
+
+```typescript
+const receipts = await Receipts.findAll({
+  include: [{
+    model: Protocol,
+    where: {
+      closedAt: { [Op.between]: [startDate, endDate] },
+      status: 'Fechado'
+    },
+    required: true
+  }]
+})
+const totalRevenue = receipts.reduce((sum, r) => sum + parseFloat(r.value.toString()), 0)
+```
+</Accordion>
+
+<Accordion title="2. Direct Costs">
+**Product Costs** - From `src/controllers/dreReportController.ts:49-63`:
+```typescript
+const protocolProducts = await Protocol_product.findAll({
+  include: [
+    {
+      model: Protocol,
+      where: {
+        closedAt: { [Op.between]: [startDate, endDate] },
+        status: 'Fechado'
+      },
+      required: true
+    },
+    { model: Product, required: true }
+  ]
+})
+const totalProductCosts = protocolProducts.reduce((sum, pp) => 
+  sum + (pp as any).Product.coust, 0
+)
+```
+
+**Service Expenses** - From `src/controllers/dreReportController.ts:65-77`:
+```typescript
+const serviceExpenses = await Protocol_register.findAll({
+  where: { type: 'Despesa' },
+  include: [{
+    model: Protocol,
+    where: {
+      closedAt: { [Op.between]: [startDate, endDate] },
+      status: 'Fechado'
+    },
+    required: true
+  }]
+})
+```
+</Accordion>
+
+<Accordion title="3. Operating Expenses">
+From `src/controllers/dreReportController.ts:79-95`, payables created in period grouped by cost center:
+
+```typescript
+const payables = await Payable.findAll({
+  where: {
+    createdAt: { [Op.between]: [startDate, endDate] },
+    status: { [Op.ne]: 'cancelado' }
+  },
+  include: [CostCenter]
+})
+
+const ccMap = new Map<string, number>()
+payables.forEach(p => {
+  const ccName = (p as any).CostCenter?.name || 'Geral'
+  ccMap.set(ccName, (ccMap.get(ccName) || 0) + parseFloat(p.value.toString()))
+})
+```
+</Accordion>
+
+<Accordion title="4. Profit Calculations">
+From `src/controllers/dreReportController.ts:97-99`:
+
+```typescript
+const grossProfit = totalRevenue - (totalProductCosts + totalServiceExpenses)
+const netResult = grossProfit - totalOperatingExpenses
+```
+</Accordion>
+
+**Example Report:**
+```json
+{
+  "revenue": 50000.00,
+  "directCosts": {
+    "productCosts": 10000.00,
+    "serviceExpenses": 5000.00
+  },
+  "operatingExpenses": {
+    "total": 15000.00,
+    "byCostCenter": [
+      { "name": "Marketing", "value": 5000.00 },
+      { "name": "Operations", "value": 7000.00 },
+      { "name": "Geral", "value": 3000.00 }
+    ]
+  },
+  "grossProfit": 35000.00,
+  "netResult": 20000.00
+}
+```
+
+### Expense Report
+
+Generate hierarchical expense reports by cost center:
+
+```typescript
+GET /expense-report?startDate=2026-03-01&endDate=2026-03-31
+```
+
+**Report Structure:**
+From `src/controllers/expenseReportController.ts:6-11`:
+
+```typescript
+interface CostCenterNode {
+  id: number
+  name: string
+  total: number                // Includes direct expenses + child totals
+  children: CostCenterNode[]   // Nested cost centers
+}
+```
+
+**Calculation Logic:**
+
+1. **Get Direct Expenses** (from `src/controllers/expenseReportController.ts:30-45`):
+```typescript
+const expenseTotalsByCC = await Payable.findAll({
+  attributes: ['CostCenterId', [fn('SUM', col('value')), 'totalValue']],
+  where: {
+    status: 'pago',
+    ...(startDate && endDate && { paymentDate: dateFilter }),
+  },
+  group: ['CostCenterId'],
+})
+```
+
+2. **Build Hierarchy** (from `src/controllers/expenseReportController.ts:48-70`):
+- Create nodes for all cost centers
+- Link children to parents
+- Identify root nodes
+
+3. **Roll Up Totals** (from `src/controllers/expenseReportController.ts:73-83`):
+```typescript
+const calculateRollupTotal = (node: CostCenterNode): number => {
+  if (node.children.length === 0) {
+    return node.total
+  }
+  const childrenTotal = node.children.reduce((sum, child) => 
+    sum + calculateRollupTotal(child), 0
+  )
+  node.total += childrenTotal
+  return node.total
+}
+```
+
+**Example Report:**
+```json
+[
+  {
+    "id": 1,
+    "name": "Marketing",
+    "total": 8000.00,
+    "children": [
+      {
+        "id": 2,
+        "name": "Digital Advertising",
+        "total": 5000.00,
+        "children": []
+      },
+      {
+        "id": 3,
+        "name": "Content Creation",
+        "total": 3000.00,
+        "children": []
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "name": "Operations",
+    "total": 7000.00,
+    "children": [...]
+  }
+]
+```
+
+<Note>
+**Hierarchical Totals**: Parent cost centers show the sum of their direct expenses plus all child expenses, providing complete category totals.
+</Note>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Cost Center Structure" icon="sitemap">
+    Create logical cost center hierarchy matching your business structure
+  </Card>
+  <Card title="Accurate Categories" icon="tags">
+    Assign all payables to appropriate cost centers for meaningful reports
+  </Card>
+  <Card title="Regular Reconciliation" icon="balance-scale">
+    Reconcile bank account balances regularly against actual bank statements
+  </Card>
+  <Card title="Timely Updates" icon="clock">
+    Update payable statuses promptly when payments are made
+  </Card>
+</CardGroup>
+
+## Common Workflows
+
+### Monthly Expense Management
+
+1. **Record Expenses**
+   ```typescript
+   POST /payables
+   { "description": "...", "value": ..., "dueDate": "...", "CostCenterId": ... }
+   ```
+
+2. **Track Due Dates**
+   ```typescript
+   GET /payables?status=pendente&dueDate[lte]=2026-03-15
+   ```
+
+3. **Process Payments**
+   ```typescript
+   PUT /payables/:id
+   { "status": "pago", "paymentDate": "2026-03-08" }
+   ```
+
+4. **Generate Reports**
+   ```typescript
+   GET /expense-report?startDate=2026-03-01&endDate=2026-03-31
+   ```
+
+### Financial Period Close
+
+1. **Verify All Transactions**
+   ```typescript
+   GET /financials?startDate=2026-03-01&endDate=2026-03-31
+   ```
+
+2. **Generate DRE Report**
+   ```typescript
+   GET /dre?month=3&year=2026
+   ```
+
+3. **Review Cost Centers**
+   ```typescript
+   GET /expense-report?startDate=2026-03-01&endDate=2026-03-31
+   ```
+
+4. **Reconcile Bank Accounts**
+   - Compare system balances with bank statements
+   - Adjust for any discrepancies
+
+### Budget Analysis
+
+1. **Set Budget by Cost Center**
+2. **Track Monthly Expenses**
+3. **Compare Actuals vs Budget** using expense reports
+4. **Identify Variances**
+5. **Adjust as Needed**

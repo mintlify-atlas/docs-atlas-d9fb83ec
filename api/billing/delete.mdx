@@ -1,0 +1,96 @@
+---
+title: "Delete Billing"
+api: "DELETE /api/billings/:id"
+description: "Delete a pending billing. Only billings with 'pendente' status can be deleted"
+---
+
+## Authentication
+
+This endpoint requires JWT authentication. Include the token in the Authorization header:
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique identifier of the billing to delete
+</ParamField>
+
+## Response
+
+Returns a 204 No Content status on successful deletion with an empty response body.
+
+<RequestExample>
+```bash cURL
+curl -X DELETE "https://api.devefficiency.com/api/billings/42" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+</RequestExample>
+
+<ResponseExample>
+```json 204 No Content
+// Empty response body
+```
+
+```json 404 Not Found
+{
+  "message": "Cobrança não encontrada"
+}
+```
+
+```json 400 Bad Request
+{
+  "message": "Apenas cobranças pendentes podem ser excluídas"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+</ResponseExample>
+
+## Deletion Rules
+
+### Status Validation
+
+Only billings with `status: "pendente"` can be deleted. This business rule prevents the deletion of:
+- **Paid billings** (`status: "pago"`) - Already processed and recorded in financial records
+- **Cancelled billings** (`status: "cancelado"`) - Should remain for audit trail purposes
+
+If you attempt to delete a billing with any status other than `pendente`, you'll receive a 400 Bad Request error with the message: "Apenas cobranças pendentes podem ser excluídas" (Only pending billings can be deleted).
+
+### Cascade Deletion
+
+When a billing is deleted, the following related records are automatically deleted due to the CASCADE constraint:
+- **BillingProtocols** - All billing protocol associations are removed
+
+This ensures referential integrity in the database.
+
+## Notes
+
+- **Important**: Deletion is permanent and cannot be undone
+- Only billings in `pendente` (pending) status can be deleted
+- Attempting to delete a paid or cancelled billing will result in a 400 error
+- All associated `BillingProtocol` records are automatically deleted due to the CASCADE constraint defined in the Billing model
+- A successful deletion returns HTTP 204 No Content with no response body
+- If the billing doesn't exist, a 404 error is returned with the message: "Cobrança não encontrada"
+- Common reasons for deletion:
+  - Billing was created in error
+  - Client requested cancellation before payment
+  - Need to regenerate billing with corrected information
+- **Best Practice**: Instead of deleting paid billings, consider updating their status to `cancelado` if you need to invalidate them while maintaining an audit trail
+- The deletion operation is atomic - either the entire billing and all related records are deleted, or none are deleted if an error occurs
+
+## Alternative to Deletion
+
+For billings that have already been paid or that you want to keep for historical records, consider:
+1. Updating the status to `cancelado` using the `PUT /api/billings/:id` endpoint
+2. Creating a new corrected billing if needed
+3. Maintaining the original billing for audit and accounting purposes
+
+This approach preserves the financial history while marking the billing as no longer active.

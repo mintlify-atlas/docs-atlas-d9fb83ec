@@ -1,0 +1,582 @@
+---
+title: 'Cost Centers'
+description: 'Manage cost centers for expense categorization and tracking'
+---
+
+The Cost Centers API allows you to organize and categorize expenses in a hierarchical structure. Cost centers support parent-child relationships, enabling multi-level expense tracking and reporting.
+
+## The Cost Center Object
+
+Cost centers represent expense categories used for financial organization and reporting.
+
+### Attributes
+
+<ParamField path="id" type="number">
+  Unique identifier for the cost center
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Display name for the cost center (max 128 characters)
+</ParamField>
+
+<ParamField path="description" type="string">
+  Optional description of the cost center's purpose
+</ParamField>
+
+<ParamField path="ParentId" type="number">
+  ID of the parent cost center. Null for root-level cost centers. This enables hierarchical organization.
+</ParamField>
+
+<ParamField path="createdAt" type="string">
+  Timestamp when the cost center was created (ISO 8601 format)
+</ParamField>
+
+<ParamField path="updatedAt" type="string">
+  Timestamp when the cost center was last updated (ISO 8601 format)
+</ParamField>
+
+<ParamField path="parent" type="object">
+  Populated parent cost center object when included in query
+</ParamField>
+
+<ParamField path="children" type="array">
+  Array of child cost center objects when included in query. Can be nested up to 5 levels deep.
+</ParamField>
+
+## List All Cost Centers
+
+Retrieve all cost centers in a hierarchical tree structure. The response includes root-level cost centers with their nested children (up to 5 levels deep).
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url https://api.devefficiency.com/api/cost-centers \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/cost-centers', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  }
+});
+const costCenters = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+  'https://api.devefficiency.com/api/cost-centers',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  }
+)
+cost_centers = response.json()
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="costCenters" type="array">
+  Array of root-level cost center objects with nested children
+  <Expandable title="Cost Center Object">
+    <ResponseField name="id" type="number">
+      Unique identifier
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Cost center name
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Cost center description
+    </ResponseField>
+    <ResponseField name="ParentId" type="number">
+      Parent cost center ID (null for root nodes)
+    </ResponseField>
+    <ResponseField name="children" type="array">
+      Array of child cost centers (recursively nested)
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      Creation timestamp
+    </ResponseField>
+    <ResponseField name="updatedAt" type="string">
+      Last update timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+[
+  {
+    "id": 1,
+    "name": "Operations",
+    "description": "Operational expenses",
+    "ParentId": null,
+    "createdAt": "2024-01-10T08:00:00.000Z",
+    "updatedAt": "2024-01-10T08:00:00.000Z",
+    "children": [
+      {
+        "id": 3,
+        "name": "Administrative",
+        "description": "General administrative expenses",
+        "ParentId": 1,
+        "createdAt": "2024-01-10T08:15:00.000Z",
+        "updatedAt": "2024-01-10T08:15:00.000Z",
+        "children": [
+          {
+            "id": 5,
+            "name": "Office Supplies",
+            "description": "Supplies and materials",
+            "ParentId": 3,
+            "createdAt": "2024-01-10T08:30:00.000Z",
+            "updatedAt": "2024-01-10T08:30:00.000Z",
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "name": "Facilities",
+        "description": "Facility management and utilities",
+        "ParentId": 1,
+        "createdAt": "2024-01-10T08:20:00.000Z",
+        "updatedAt": "2024-01-10T08:20:00.000Z",
+        "children": []
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Development",
+    "description": "Software development expenses",
+    "ParentId": null,
+    "createdAt": "2024-01-10T08:05:00.000Z",
+    "updatedAt": "2024-01-10T08:05:00.000Z",
+    "children": [
+      {
+        "id": 7,
+        "name": "Technology",
+        "description": "IT infrastructure and services",
+        "ParentId": 2,
+        "createdAt": "2024-01-10T08:35:00.000Z",
+        "updatedAt": "2024-01-10T08:35:00.000Z",
+        "children": []
+      }
+    ]
+  }
+]
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+<Info>
+  The list endpoint returns only root-level cost centers (where `ParentId` is null) with their nested children. This creates a complete hierarchical tree structure for easy visualization and navigation.
+</Info>
+
+## Get a Cost Center
+
+Retrieve details of a specific cost center by ID, including its parent and immediate children.
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url https://api.devefficiency.com/api/cost-centers/3 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/cost-centers/3', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  }
+});
+const costCenter = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+  'https://api.devefficiency.com/api/cost-centers/3',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  }
+)
+cost_center = response.json()
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the cost center
+</ParamField>
+
+### Response
+
+<ResponseField name="costCenter" type="object">
+  The requested cost center object with parent and children populated
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "id": 3,
+  "name": "Administrative",
+  "description": "General administrative expenses",
+  "ParentId": 1,
+  "createdAt": "2024-01-10T08:15:00.000Z",
+  "updatedAt": "2024-01-10T08:15:00.000Z",
+  "parent": {
+    "id": 1,
+    "name": "Operations",
+    "description": "Operational expenses",
+    "ParentId": null,
+    "createdAt": "2024-01-10T08:00:00.000Z",
+    "updatedAt": "2024-01-10T08:00:00.000Z"
+  },
+  "children": [
+    {
+      "id": 5,
+      "name": "Office Supplies",
+      "description": "Supplies and materials",
+      "ParentId": 3,
+      "createdAt": "2024-01-10T08:30:00.000Z",
+      "updatedAt": "2024-01-10T08:30:00.000Z"
+    },
+    {
+      "id": 6,
+      "name": "Travel",
+      "description": "Business travel expenses",
+      "ParentId": 3,
+      "createdAt": "2024-01-10T08:32:00.000Z",
+      "updatedAt": "2024-01-10T08:32:00.000Z"
+    }
+  ]
+}
+```
+
+```json 404 - Not Found
+{
+  "error": "Cost center not found"
+}
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+## Create a Cost Center
+
+Create a new cost center. You can create either a root-level cost center (by omitting `ParentId`) or a child cost center (by providing a `ParentId`).
+
+<CodeGroup>
+```bash cURL
+curl --request POST \
+  --url https://api.devefficiency.com/api/cost-centers \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "Marketing",
+    "description": "Marketing and advertising expenses",
+    "ParentId": null
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/cost-centers', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'Marketing',
+    description: 'Marketing and advertising expenses',
+    ParentId: null
+  })
+});
+const newCostCenter = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+  'https://api.devefficiency.com/api/cost-centers',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  json={
+    'name': 'Marketing',
+    'description': 'Marketing and advertising expenses',
+    'ParentId': None
+  }
+)
+new_cost_center = response.json()
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Display name for the cost center (max 128 characters)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional description of the cost center's purpose
+</ParamField>
+
+<ParamField body="ParentId" type="number">
+  ID of the parent cost center. Set to null or omit for root-level cost centers.
+</ParamField>
+
+### Response
+
+<ResponseField name="costCenter" type="object">
+  The newly created cost center object
+</ResponseField>
+
+<ResponseExample>
+```json 201 - Created
+{
+  "id": 8,
+  "name": "Marketing",
+  "description": "Marketing and advertising expenses",
+  "ParentId": null,
+  "createdAt": "2024-03-08T16:15:00.000Z",
+  "updatedAt": "2024-03-08T16:15:00.000Z"
+}
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+### Example: Creating a Child Cost Center
+
+<CodeGroup>
+```bash cURL
+curl --request POST \
+  --url https://api.devefficiency.com/api/cost-centers \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "Digital Advertising",
+    "description": "Online ads and campaigns",
+    "ParentId": 8
+  }'
+```
+</CodeGroup>
+
+## Update a Cost Center
+
+Update an existing cost center. You can change its name, description, or parent relationship to reorganize your cost center hierarchy.
+
+<CodeGroup>
+```bash cURL
+curl --request PUT \
+  --url https://api.devefficiency.com/api/cost-centers/8 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "Marketing & Sales",
+    "description": "Marketing, advertising, and sales expenses"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/cost-centers/8', {
+  method: 'PUT',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'Marketing & Sales',
+    description: 'Marketing, advertising, and sales expenses'
+  })
+});
+const updatedCostCenter = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.put(
+  'https://api.devefficiency.com/api/cost-centers/8',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  json={
+    'name': 'Marketing & Sales',
+    'description': 'Marketing, advertising, and sales expenses'
+  }
+)
+updated_cost_center = response.json()
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the cost center to update
+</ParamField>
+
+### Request Body
+
+Include only the fields you want to update. All fields are optional.
+
+<ParamField body="name" type="string">
+  Display name for the cost center (max 128 characters)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Description of the cost center's purpose
+</ParamField>
+
+<ParamField body="ParentId" type="number">
+  ID of the parent cost center. Change this to move the cost center to a different parent.
+</ParamField>
+
+### Response
+
+<ResponseField name="costCenter" type="object">
+  The updated cost center object
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "id": 8,
+  "name": "Marketing & Sales",
+  "description": "Marketing, advertising, and sales expenses",
+  "ParentId": null,
+  "createdAt": "2024-03-08T16:15:00.000Z",
+  "updatedAt": "2024-03-08T16:30:00.000Z"
+}
+```
+
+```json 404 - Not Found
+{
+  "error": "Cost center not found"
+}
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+## Delete a Cost Center
+
+Permanently delete a cost center from the system. Child cost centers will be automatically deleted due to the cascade delete behavior.
+
+<Warning>
+  This action is irreversible and will cascade delete all child cost centers. Ensure no payables are currently assigned to this cost center or its children before deletion.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url https://api.devefficiency.com/api/cost-centers/8 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/cost-centers/8', {
+  method: 'DELETE',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+```
+
+```python Python
+import requests
+
+response = requests.delete(
+  'https://api.devefficiency.com/api/cost-centers/8',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+)
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the cost center to delete
+</ParamField>
+
+### Response
+
+<ResponseExample>
+```json 204 - No Content
+// Empty response body on success
+```
+
+```json 404 - Not Found
+{
+  "error": "Cost center not found"
+}
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+## Hierarchical Structure
+
+Cost centers support up to 5 levels of nesting, allowing you to create sophisticated organizational structures:
+
+```
+Operations (Level 1)
+└── Administrative (Level 2)
+    ├── Office Supplies (Level 3)
+    │   └── Stationery (Level 4)
+    │       └── Paper Products (Level 5)
+    └── Travel (Level 3)
+        ├── Domestic (Level 4)
+        └── International (Level 4)
+```
+
+This hierarchical structure is particularly useful for:
+
+- **Roll-up reporting**: Expenses aggregate from child to parent cost centers
+- **Departmental organization**: Mirror your company structure
+- **Budget allocation**: Distribute budgets across organizational units
+- **Expense analysis**: Drill down from high-level to detailed categories
+
+## Related Resources
+
+- [Payables](/api/financial/payables) - Assign expenses to cost centers
+- [Financial Reports](/api/financial/reports) - View expense reports by cost center hierarchy

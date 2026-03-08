@@ -1,0 +1,455 @@
+---
+title: "List Protocols"
+api: "GET /api/protocols"
+description: "Retrieve a paginated list of protocols with optional filtering by client, status, subscription, or service order"
+---
+
+## Authentication
+
+This endpoint requires JWT authentication. Include the bearer token in the Authorization header.
+
+## Query Parameters
+
+<ParamField query="page" type="integer" default="1">
+  Page number for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default="10">
+  Number of records per page. Set to `-1` to retrieve all records without pagination
+</ParamField>
+
+<ParamField query="ClientId" type="integer">
+  Filter protocols by client ID. Returns protocols associated with the client's service orders and subscriptions
+</ParamField>
+
+<ParamField query="SubscriptionId" type="integer">
+  Filter protocols by subscription ID
+</ParamField>
+
+<ParamField query="ServiceOrderId" type="integer">
+  Filter protocols by service order ID
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter protocols by status. Supports multiple comma-separated values.
+  
+  **Possible values:**
+  - `Em aberto` - Open protocol
+  - `Liberado para pagamento` - Released for payment
+  - `Fechado` - Closed
+  - `Cancelado` - Cancelled
+  
+  **Example:** `status=Em aberto,Liberado para pagamento`
+</ParamField>
+
+## Response
+
+Returns a paginated list of protocols with nested relationships.
+
+<ResponseField name="data" type="array">
+  Array of protocol objects
+  
+  <Expandable title="Protocol Object">
+    <ResponseField name="id" type="integer">
+      Unique protocol identifier
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Current protocol status: `Em aberto`, `Liberado para pagamento`, `Fechado`, or `Cancelado`
+    </ResponseField>
+    
+    <ResponseField name="notes" type="string">
+      Additional notes or comments about the protocol
+    </ResponseField>
+    
+    <ResponseField name="ServiceOrderId" type="integer | null">
+      Associated service order ID (null if protocol belongs to a subscription)
+    </ResponseField>
+    
+    <ResponseField name="SubscriptionId" type="integer | null">
+      Associated subscription ID (null if protocol belongs to a service order)
+    </ResponseField>
+    
+    <ResponseField name="closedAt" type="datetime | null">
+      Timestamp when the protocol was closed
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="datetime">
+      Protocol creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="datetime">
+      Last update timestamp
+    </ResponseField>
+    
+    <ResponseField name="Protocol_registers" type="array">
+      Services and expenses registered in this protocol
+      
+      <Expandable title="Protocol Register Object">
+        <ResponseField name="id" type="integer">
+          Register identifier
+        </ResponseField>
+        
+        <ResponseField name="description" type="string">
+          Description of the service or expense
+        </ResponseField>
+        
+        <ResponseField name="value" type="float">
+          Monetary value
+        </ResponseField>
+        
+        <ResponseField name="type" type="string">
+          Type of register: `Serviço` (Service) or `Despesa` (Expense)
+        </ResponseField>
+        
+        <ResponseField name="ProtocolId" type="integer">
+          Associated protocol ID
+        </ResponseField>
+        
+        <ResponseField name="createdAt" type="datetime">
+          Creation timestamp
+        </ResponseField>
+        
+        <ResponseField name="updatedAt" type="datetime">
+          Last update timestamp
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="Protocol_products" type="array">
+      Products associated with this protocol
+      
+      <Expandable title="Protocol Product Object">
+        <ResponseField name="id" type="integer">
+          Protocol product identifier
+        </ResponseField>
+        
+        <ResponseField name="charge_type" type="string">
+          Charging frequency: `Único` (One-time), `Mensal` (Monthly), or `Anual` (Annual)
+        </ResponseField>
+        
+        <ResponseField name="value" type="float">
+          Product price for this protocol
+        </ResponseField>
+        
+        <ResponseField name="ProductId" type="integer">
+          Associated product ID
+        </ResponseField>
+        
+        <ResponseField name="ProtocolId" type="integer">
+          Associated protocol ID
+        </ResponseField>
+        
+        <ResponseField name="LicenseId" type="integer | null">
+          Associated license ID (if product generates a license)
+        </ResponseField>
+        
+        <ResponseField name="Product" type="object">
+          Product details
+          
+          <Expandable title="Product Object">
+            <ResponseField name="id" type="integer">
+              Product identifier
+            </ResponseField>
+            
+            <ResponseField name="description" type="string">
+              Product description
+            </ResponseField>
+            
+            <ResponseField name="value" type="float">
+              Default product price
+            </ResponseField>
+            
+            <ResponseField name="coust" type="float">
+              Product cost
+            </ResponseField>
+            
+            <ResponseField name="generate_license" type="boolean">
+              Whether this product generates a license upon purchase
+            </ResponseField>
+            
+            <ResponseField name="createdAt" type="datetime">
+              Creation timestamp
+            </ResponseField>
+            
+            <ResponseField name="updatedAt" type="datetime">
+              Last update timestamp
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="createdAt" type="datetime">
+          Creation timestamp
+        </ResponseField>
+        
+        <ResponseField name="updatedAt" type="datetime">
+          Last update timestamp
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="Receipts" type="array">
+      Payment receipts associated with this protocol
+      
+      <Expandable title="Receipt Object">
+        <ResponseField name="id" type="integer">
+          Receipt identifier
+        </ResponseField>
+        
+        <ResponseField name="method" type="string">
+          Payment method: `Pix`, `Boleto`, `Cartão`, `Transferência`, or `Espécie`
+        </ResponseField>
+        
+        <ResponseField name="value" type="float">
+          Payment amount
+        </ResponseField>
+        
+        <ResponseField name="note" type="string">
+          Additional notes about the payment
+        </ResponseField>
+        
+        <ResponseField name="ProtocolId" type="integer">
+          Associated protocol ID
+        </ResponseField>
+        
+        <ResponseField name="BankAccountId" type="integer">
+          Bank account where payment was received
+        </ResponseField>
+        
+        <ResponseField name="createdAt" type="datetime">
+          Receipt creation timestamp
+        </ResponseField>
+        
+        <ResponseField name="updatedAt" type="datetime">
+          Last update timestamp
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="Service_order" type="object | null">
+      Associated service order (if protocol is linked to a service order)
+      
+      <Expandable title="Service Order Object">
+        <ResponseField name="id" type="integer">
+          Service order identifier
+        </ResponseField>
+        
+        <ResponseField name="subject" type="string">
+          Service order subject/title
+        </ResponseField>
+        
+        <ResponseField name="description" type="string">
+          Detailed description
+        </ResponseField>
+        
+        <ResponseField name="status" type="string">
+          Service order status: `Em avaliação`, `Orçamento enviado`, `Na fila`, `Em correções`, `Pendente`, `Finalizado`, or `Cancelado`
+        </ResponseField>
+        
+        <ResponseField name="ProjectId" type="integer">
+          Associated project ID
+        </ResponseField>
+        
+        <ResponseField name="ClientId" type="integer">
+          Associated client ID
+        </ResponseField>
+        
+        <ResponseField name="Client" type="object">
+          Client information (nested object with client details)
+        </ResponseField>
+        
+        <ResponseField name="createdAt" type="datetime">
+          Creation timestamp
+        </ResponseField>
+        
+        <ResponseField name="updatedAt" type="datetime">
+          Last update timestamp
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="Subscription" type="object | null">
+      Associated subscription (if protocol is linked to a subscription)
+      
+      <Expandable title="Subscription Object">
+        <ResponseField name="id" type="integer">
+          Subscription identifier
+        </ResponseField>
+        
+        <ResponseField name="name" type="string">
+          Subscription name
+        </ResponseField>
+        
+        <ResponseField name="status" type="string">
+          Subscription status: `Pendente`, `Pago`, `Não pago`, or `Cancelado`
+        </ResponseField>
+        
+        <ResponseField name="dueAt" type="datetime">
+          Subscription due date
+        </ResponseField>
+        
+        <ResponseField name="ClientId" type="integer">
+          Associated client ID
+        </ResponseField>
+        
+        <ResponseField name="ProjectId" type="integer">
+          Associated project ID
+        </ResponseField>
+        
+        <ResponseField name="Client" type="object">
+          Client information (nested object with client details)
+        </ResponseField>
+        
+        <ResponseField name="createdAt" type="datetime">
+          Creation timestamp
+        </ResponseField>
+        
+        <ResponseField name="updatedAt" type="datetime">
+          Last update timestamp
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total" type="integer">
+  Total number of protocols matching the filter criteria
+</ResponseField>
+
+<ResponseField name="page" type="integer">
+  Current page number
+</ResponseField>
+
+<ResponseField name="limit" type="integer">
+  Number of records per page
+</ResponseField>
+
+## Example Request
+
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols?page=1&limit=10&status=Em%20aberto,Liberado%20para%20pagamento' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+## Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": 123,
+      "status": "Em aberto",
+      "notes": "Protocol for monthly maintenance services",
+      "ServiceOrderId": null,
+      "SubscriptionId": 45,
+      "closedAt": null,
+      "createdAt": "2026-03-01T10:00:00.000Z",
+      "updatedAt": "2026-03-01T10:00:00.000Z",
+      "Protocol_registers": [
+        {
+          "id": 1,
+          "description": "Monthly server maintenance",
+          "value": 500.00,
+          "type": "Serviço",
+          "ProtocolId": 123,
+          "createdAt": "2026-03-01T10:00:00.000Z",
+          "updatedAt": "2026-03-01T10:00:00.000Z"
+        },
+        {
+          "id": 2,
+          "description": "Cloud storage costs",
+          "value": 150.00,
+          "type": "Despesa",
+          "ProtocolId": 123,
+          "createdAt": "2026-03-01T10:00:00.000Z",
+          "updatedAt": "2026-03-01T10:00:00.000Z"
+        }
+      ],
+      "Protocol_products": [
+        {
+          "id": 1,
+          "charge_type": "Mensal",
+          "value": 299.99,
+          "ProductId": 10,
+          "ProtocolId": 123,
+          "LicenseId": 55,
+          "Product": {
+            "id": 10,
+            "description": "Premium Support Package",
+            "value": 299.99,
+            "coust": 100.00,
+            "generate_license": true,
+            "createdAt": "2026-01-15T08:00:00.000Z",
+            "updatedAt": "2026-01-15T08:00:00.000Z"
+          },
+          "createdAt": "2026-03-01T10:00:00.000Z",
+          "updatedAt": "2026-03-01T10:00:00.000Z"
+        }
+      ],
+      "Receipts": [
+        {
+          "id": 1,
+          "method": "Pix",
+          "value": 300.00,
+          "note": "Partial payment",
+          "ProtocolId": 123,
+          "BankAccountId": 1,
+          "createdAt": "2026-03-02T14:30:00.000Z",
+          "updatedAt": "2026-03-02T14:30:00.000Z"
+        }
+      ],
+      "Service_order": null,
+      "Subscription": {
+        "id": 45,
+        "name": "Monthly Maintenance Plan",
+        "status": "Pago",
+        "dueAt": "2026-03-31T23:59:59.000Z",
+        "ClientId": 12,
+        "ProjectId": 5,
+        "Client": {
+          "id": 12,
+          "name": "Acme Corporation"
+        },
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-03-01T10:00:00.000Z"
+      }
+    }
+  ],
+  "total": 47,
+  "page": 1,
+  "limit": 10
+}
+```
+
+## Filtering Examples
+
+### Get all protocols for a specific client
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols?ClientId=12' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+### Get protocols with multiple status values
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols?status=Liberado%20para%20pagamento,Fechado' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+### Get all protocols without pagination
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols?limit=-1' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+## Notes
+
+- Each protocol is associated with either a Service Order OR a Subscription (never both)
+- When filtering by `ClientId`, the API automatically finds all service orders and subscriptions belonging to that client
+- The `status` parameter supports comma-separated values for filtering by multiple statuses
+- Protocol registers include both services (`Serviço`) and expenses (`Despesa`) related to the protocol
+- Protocol products can have different charge types (`Único`, `Mensal`, `Anual`) that determine billing frequency
+- Receipts track all payments made against the protocol, supporting multiple payment methods

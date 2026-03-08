@@ -1,0 +1,208 @@
+---
+title: "Generate Billing PDF"
+api: "GET /api/billings/:id/pdf"
+description: "Generate and download a PDF invoice for a specific billing with complete details including protocols, services, and client information"
+---
+
+## Authentication
+
+This endpoint requires JWT authentication. Include the token in the Authorization header:
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique identifier of the billing for which to generate a PDF invoice
+</ParamField>
+
+## Response
+
+Returns a PDF file as binary data with appropriate headers for file download.
+
+### Response Headers
+
+<ResponseField name="Content-Type" type="string">
+  Set to `application/pdf` to indicate PDF file content
+</ResponseField>
+
+<ResponseField name="Content-Disposition" type="string">
+  Set to `attachment; filename=charge_{client_name}_{timestamp}.pdf` to trigger file download with a descriptive filename
+  
+  Example: `attachment; filename=charge_acme_corporation_1709898430000.pdf`
+</ResponseField>
+
+## PDF Generation Process
+
+The endpoint performs the following steps to generate a comprehensive invoice PDF:
+
+1. **Data Retrieval**: Fetches the complete billing data including:
+   - Client information
+   - All BillingProtocols associated with the billing
+   - Protocol details including products, registers, receipts
+   - Service Orders with associated Projects
+   - Subscription information
+
+2. **Configuration Loading**: Retrieves system configuration including:
+   - Company logo (converted to base64 for embedding)
+   - Company information and branding
+   - Invoice template settings
+
+3. **Template Rendering**: Uses EJS template engine to render HTML invoice from `src/views/billing.ejs`
+
+4. **PDF Conversion**: Uses Puppeteer with headless Chrome to convert HTML to PDF:
+   - Waits for all resources to load (`networkidle0`)
+   - Emulates screen media type for proper styling
+   - Generates production-quality PDF output
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.devefficiency.com/api/billings/42/pdf" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  --output invoice-42.pdf
+```
+
+```bash Save with Custom Name
+curl -X GET "https://api.devefficiency.com/api/billings/42/pdf" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  --output "acme-invoice-march-2026.pdf"
+```
+
+```bash JavaScript Fetch
+fetch('https://api.devefficiency.com/api/billings/42/pdf', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+})
+.then(response => response.blob())
+.then(blob => {
+  // Create download link
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'invoice.pdf';
+  a.click();
+});
+```
+</RequestExample>
+
+<ResponseExample>
+```text 200 Success
+[Binary PDF data]
+
+Response Headers:
+Content-Type: application/pdf
+Content-Disposition: attachment; filename=charge_acme_corporation_1709898430000.pdf
+```
+
+```json 404 Not Found
+{
+  "error": "Not Found",
+  "message": "Billing with id 999 not found"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 500 Internal Server Error
+{
+  "error": "PDF Generation Failed",
+  "message": "Unable to generate PDF. Please try again later."
+}
+```
+</ResponseExample>
+
+## PDF Content
+
+The generated PDF invoice includes:
+
+### Company Information
+- Company logo (from Config with type 'logo')
+- Company name and branding
+- Contact information
+- Tax identification numbers
+
+### Client Details
+- Client name and contact information
+- Client address and location
+- Client tax documents
+
+### Billing Information
+- Billing ID and reference number
+- Issue date (createdAt)
+- Due date (due_date)
+- Payment date (payment_date, if paid)
+- Payment status (status)
+- Payment method (method)
+- Total value (total_value)
+
+### Line Items (BillingProtocols)
+
+For each protocol included in the billing:
+- Protocol number and description
+- Associated products with quantities and prices
+- Service order details and project information
+- Subscription details (if applicable)
+- Protocol-specific value
+- Receipts and payment records
+
+### Financial Summary
+- Subtotals for each line item
+- Total amount due
+- Payment instructions based on payment method
+
+## Technical Implementation
+
+### Dependencies
+- **EJS**: Template rendering engine for HTML generation
+- **Puppeteer**: Headless Chrome for PDF conversion
+- **Moment.js**: Date formatting and manipulation
+
+### Puppeteer Configuration
+```javascript
+{
+  headless: 'new',
+  executablePath: '/usr/bin/google-chrome',
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-gpu'
+  ]
+}
+```
+
+### File Naming Convention
+The PDF filename follows the pattern:
+```
+charge_{client_name_lowercase_underscored}_{unix_timestamp}.pdf
+```
+
+Example: `charge_acme_corporation_1709898430000.pdf`
+
+## Notes
+
+- PDF generation is resource-intensive and may take several seconds depending on the complexity of the billing
+- The endpoint launches a headless Chrome browser instance for each request and properly cleans it up afterward
+- Images in the PDF (like company logo) are embedded as base64 data URIs to ensure they display correctly
+- The template waits for `networkidle0` to ensure all assets are loaded before PDF generation
+- Only PNG, JPG, JPEG, and GIF image formats are supported for logos
+- The PDF is generated in-memory and streamed directly to the client without saving to disk
+- Large billings with many protocols may result in multi-page PDFs
+- The PDF uses screen media emulation for consistent rendering
+- All dates in the PDF are formatted according to the system locale using moment.js
+
+## Use Cases
+
+- **Client Invoicing**: Send professional PDF invoices to clients via email
+- **Record Keeping**: Download and archive billing records for accounting
+- **Payment Processing**: Attach PDF invoices to payment reminders
+- **Financial Reporting**: Include detailed billing breakdowns in financial reports
+- **Legal Compliance**: Maintain formal invoice documentation for tax purposes

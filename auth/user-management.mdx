@@ -1,0 +1,522 @@
+---
+title: 'User & Credential Management'
+description: 'Comprehensive guide to user authentication and credential storage in DevEfficiency'
+---
+
+## Overview
+
+DevEfficiency implements a dual-layer credential system: User credentials for API authentication and Client credentials for storing third-party service access information. Both systems use industry-standard security practices including bcrypt password hashing and Sequelize ORM for data persistence.
+
+## User Model
+
+The User model represents authenticated API users with secure password storage:
+
+<CodeGroup>
+```typescript src/models/User.ts
+import { Model, InferAttributes, InferCreationAttributes, CreationOptional, DataTypes } from 'sequelize'
+import db from '../db'
+
+class User extends Model<InferAttributes<User>, InferCreationAttributes<User>> {
+    declare id: CreationOptional<number>
+    declare username: string
+    declare password: string
+    
+    declare createdAt: CreationOptional<Date>
+    declare updatedAt: CreationOptional<Date>
+}
+
+User.init(
+    {
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        username: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+            unique: true,
+        },
+        password: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+        },
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    },
+    {
+        tableName: 'users',
+        sequelize: db,
+    },
+)
+```
+</CodeGroup>
+
+### User Model Fields
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | INTEGER | Primary Key, Auto-increment | Unique user identifier |
+| `username` | STRING(128) | NOT NULL, UNIQUE | User login name |
+| `password` | STRING(128) | NOT NULL | bcrypt hashed password |
+| `createdAt` | DATE | Auto-generated | Record creation timestamp |
+| `updatedAt` | DATE | Auto-generated | Last modification timestamp |
+
+<Info>
+  The `username` field has a unique constraint enforced at the database level, preventing duplicate accounts and ensuring efficient lookups.
+</Info>
+
+## Password Security with bcrypt
+
+DevEfficiency uses bcrypt for password hashing, providing protection against rainbow table and brute-force attacks:
+
+### Password Hashing
+
+<CodeGroup>
+```typescript Password Hashing Example
+import bcrypt from 'bcrypt'
+
+// Generate salt and hash password
+const saltRounds = 10
+const hashedPassword = await bcrypt.hash(plainTextPassword, saltRounds)
+
+// Store in database
+await User.create({
+    username: 'newuser',
+    password: hashedPassword
+})
+```
+</CodeGroup>
+
+<Warning>
+  Passwords must **always** be hashed before storage. Never store plain-text passwords in the database. The bcrypt algorithm is computationally expensive by design, making brute-force attacks impractical.
+</Warning>
+
+### Password Verification
+
+The authentication controller uses bcrypt's synchronous comparison:
+
+<CodeGroup>
+```typescript src/controllers/authController.ts
+import bcrypt from 'bcrypt'
+
+static async auth(req: authRequest, res: FastifyReply): Promise<FastifyReply> {
+    const { username, password } = req.body
+    
+    const user = await User.findOne({ where: { username } })
+    
+    if (!user) return res.status(401).send({ 
+        error: true, 
+        message: 'Usuário ou senha invalidos.' 
+    })
+    
+    if (!bcrypt.compareSync(password, user.password))
+        return res.status(401).send({ 
+            error: true, 
+            message: 'Usuário ou senha invalidos.' 
+        })
+    
+    // Generate JWT token...
+}
+```
+</CodeGroup>
+
+<Steps>
+  <Step title="User Lookup">
+    The system queries the database for a user with the provided username.
+  </Step>
+  
+  <Step title="Existence Check">
+    If no user is found, return a generic error message to prevent username enumeration.
+  </Step>
+  
+  <Step title="Password Comparison">
+    bcrypt compares the plain-text password with the stored hash using `compareSync()`.
+  </Step>
+  
+  <Step title="Error Response">
+    Authentication failures return identical error messages whether the username or password is incorrect, preventing information leakage.
+  </Step>
+</Steps>
+
+<Tip>
+  Using the same error message for both invalid username and invalid password prevents attackers from determining which credentials are valid through timing or message analysis.
+</Tip>
+
+## Credential Model
+
+The Credential model stores third-party service access information for clients:
+
+<CodeGroup>
+```typescript src/models/Credential.ts
+import { Model, InferAttributes, InferCreationAttributes, CreationOptional, ForeignKey, DataTypes } from 'sequelize'
+import db from '../db'
+import Client from './Client'
+
+class Credential extends Model<InferAttributes<Credential>, InferCreationAttributes<Credential>> {
+    declare id: CreationOptional<number>
+    declare description: string
+    declare host: string
+    declare username: string
+    declare password: string
+    
+    declare ClientId: ForeignKey<Client['id']>
+    
+    declare createdAt: CreationOptional<Date>
+    declare updatedAt: CreationOptional<Date>
+}
+
+Credential.init(
+    {
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        description: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+        },
+        host: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+        },
+        username: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+        },
+        password: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+        },
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    },
+    {
+        tableName: 'credentials',
+        sequelize: db,
+    },
+)
+```
+</CodeGroup>
+
+### Credential Model Fields
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | INTEGER | Primary Key, Auto-increment | Unique credential identifier |
+| `description` | STRING(128) | NOT NULL | Human-readable credential description |
+| `host` | STRING(128) | NOT NULL | Service hostname or URL |
+| `username` | STRING(128) | NOT NULL | Service username/login |
+| `password` | STRING(128) | NOT NULL | Service password |
+| `ClientId` | INTEGER | Foreign Key | Associated client ID |
+| `createdAt` | DATE | Auto-generated | Record creation timestamp |
+| `updatedAt` | DATE | Auto-generated | Last modification timestamp |
+
+<Note>
+  Credentials are associated with Clients through the `ClientId` foreign key, allowing each client to have multiple stored credentials for different services.
+</Note>
+
+## Credential CRUD Operations
+
+The credentials controller provides full CRUD functionality for managing third-party service credentials:
+
+### List All Credentials
+
+<CodeGroup>
+```typescript src/controllers/credentialsController.ts
+static async index(req: FastifyRequest, res: FastifyReply): Promise<FastifyReply> {
+    return res.send(await Credential.findAll())
+}
+```
+
+```bash API Request
+curl -X GET https://api.devefficiency.com/api/credentials \
+  -H "Authorization: Bearer <token>"
+```
+</CodeGroup>
+
+### Get Single Credential
+
+<CodeGroup>
+```typescript src/controllers/credentialsController.ts
+static async show(req: credentialsRequest, res: FastifyReply): Promise<FastifyReply> {
+    return res.send(await Credential.findByPk(req.params.id))
+}
+```
+
+```bash API Request
+curl -X GET https://api.devefficiency.com/api/credentials/1 \
+  -H "Authorization: Bearer <token>"
+```
+</CodeGroup>
+
+### Create Credential
+
+<CodeGroup>
+```typescript src/controllers/credentialsController.ts
+static async store(req: credentialsRequest, res: FastifyReply): Promise<FastifyReply> {
+    const { description, host, username, password, ClientId } = req.body
+    
+    const client = await Client.findByPk(ClientId)
+    const credentials = await client?.createCredential({ 
+        description, 
+        host, 
+        username, 
+        password 
+    })
+    
+    return res.send(credentials)
+}
+```
+
+```bash API Request
+curl -X POST https://api.devefficiency.com/api/credentials \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Production Database",
+    "host": "db.example.com",
+    "username": "dbuser",
+    "password": "securepass123",
+    "ClientId": 1
+  }'
+```
+</CodeGroup>
+
+<Info>
+  The `createCredential` method is a Sequelize association method that automatically sets the `ClientId` foreign key and establishes the relationship between the client and credential.
+</Info>
+
+### Update Credential
+
+<CodeGroup>
+```typescript src/controllers/credentialsController.ts
+static async update(req: credentialsRequest, res: FastifyReply): Promise<FastifyReply> {
+    const { id } = req.params
+    const { description, host, username, password } = req.body
+    
+    const credential = await Credential.findByPk(id)
+    
+    await credential?.update({
+        description,
+        host,
+        username,
+        password,
+    })
+    await credential?.save()
+    
+    return res.send(credential)
+}
+```
+
+```bash API Request
+curl -X PUT https://api.devefficiency.com/api/credentials/1 \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "Updated Description",
+    "host": "newhost.example.com",
+    "username": "newuser",
+    "password": "newpassword123"
+  }'
+```
+</CodeGroup>
+
+### Delete Credential
+
+<CodeGroup>
+```typescript src/controllers/credentialsController.ts
+static async destroy(req: credentialsRequest, res: FastifyReply): Promise<FastifyReply> {
+    const { id } = req.params
+    
+    const credential = await Credential.findByPk(id)
+    await credential?.destroy()
+    
+    return res.status(204).send()
+}
+```
+
+```bash API Request
+curl -X DELETE https://api.devefficiency.com/api/credentials/1 \
+  -H "Authorization: Bearer <token>"
+```
+</CodeGroup>
+
+<Warning>
+  Credential deletion is permanent and cannot be undone. Ensure proper authorization checks before allowing credential deletion, especially for production credentials.
+</Warning>
+
+## Route Protection
+
+All credential endpoints are protected by the `isAuthed` middleware:
+
+<CodeGroup>
+```typescript src/routes.ts
+instance.get('/credentials', { preHandler: [isAuthed] }, credentialsController.index)
+instance.get('/credentials/:id', { preHandler: [isAuthed] }, credentialsController.show)
+instance.post('/credentials', { preHandler: [isAuthed] }, credentialsController.store)
+instance.put('/credentials/:id', { preHandler: [isAuthed] }, credentialsController.update)
+instance.delete('/credentials/:id', { preHandler: [isAuthed] }, credentialsController.destroy)
+```
+</CodeGroup>
+
+<Info>
+  Every credential operation requires a valid JWT token. Unauthorized requests will receive a 401 error before reaching the controller logic.
+</Info>
+
+## Security Considerations
+
+### Current Implementation
+
+The current implementation stores credentials in the database:
+
+<Warning>
+  **Security Recommendations**:
+  
+  1. **Encryption at Rest**: Credential passwords should be encrypted before storage, not stored in plain text
+  2. **Access Control**: Implement role-based access control (RBAC) to limit credential access
+  3. **Audit Logging**: Log all credential access and modifications for security auditing
+  4. **Secrets Management**: Consider using a dedicated secrets manager (HashiCorp Vault, AWS Secrets Manager) for production credentials
+  5. **Password Rotation**: Implement automated credential rotation policies
+</Warning>
+
+### Encryption Recommendations
+
+<CodeGroup>
+```typescript Example: AES Encryption for Credentials
+import crypto from 'crypto'
+
+class CredentialEncryption {
+    private static algorithm = 'aes-256-gcm'
+    private static key = Buffer.from(process.env.ENCRYPTION_KEY!, 'hex')
+    
+    static encrypt(text: string): { encrypted: string; iv: string; tag: string } {
+        const iv = crypto.randomBytes(16)
+        const cipher = crypto.createCipheriv(this.algorithm, this.key, iv)
+        
+        let encrypted = cipher.update(text, 'utf8', 'hex')
+        encrypted += cipher.final('hex')
+        
+        const tag = cipher.getAuthTag()
+        
+        return {
+            encrypted,
+            iv: iv.toString('hex'),
+            tag: tag.toString('hex')
+        }
+    }
+    
+    static decrypt(encrypted: string, iv: string, tag: string): string {
+        const decipher = crypto.createDecipheriv(
+            this.algorithm, 
+            this.key, 
+            Buffer.from(iv, 'hex')
+        )
+        
+        decipher.setAuthTag(Buffer.from(tag, 'hex'))
+        
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8')
+        decrypted += decipher.final('utf8')
+        
+        return decrypted
+    }
+}
+
+// Usage in controller
+const encryptedData = CredentialEncryption.encrypt(password)
+await client?.createCredential({
+    description,
+    host,
+    username,
+    password: encryptedData.encrypted,
+    iv: encryptedData.iv,
+    tag: encryptedData.tag
+})
+```
+</CodeGroup>
+
+<Tip>
+  When implementing encryption, store the initialization vector (IV) and authentication tag alongside the encrypted data. These are required for decryption and are not secret values.
+</Tip>
+
+## User Authentication Flow
+
+The complete authentication flow for API access:
+
+<Steps>
+  <Step title="User Login Request">
+    Client submits username and password to `/api/auth` endpoint.
+  </Step>
+  
+  <Step title="Database Lookup">
+    System queries User table with Sequelize: `User.findOne({ where: { username } })`
+  </Step>
+  
+  <Step title="User Validation">
+    Check if user exists. If not, return 401 with generic error message.
+  </Step>
+  
+  <Step title="Password Verification">
+    Use bcrypt to compare submitted password with stored hash: `bcrypt.compareSync(password, user.password)`
+  </Step>
+  
+  <Step title="Token Generation">
+    Create JWT token with user payload, signed with SECRET, expires in 1 hour.
+  </Step>
+  
+  <Step title="Response">
+    Return bearer token, token type, and expiration timestamp to client.
+  </Step>
+  
+  <Step title="Subsequent Requests">
+    Client includes token in Authorization header for all protected endpoints.
+  </Step>
+  
+  <Step title="Middleware Verification">
+    `isAuthed` middleware verifies token signature and expiration, attaches user to request.
+  </Step>
+  
+  <Step title="Route Handler">
+    Protected route handler executes with authenticated user context available.
+  </Step>
+</Steps>
+
+## Best Practices
+
+### Password Policy
+
+<Note>
+  Consider implementing password requirements:
+  
+  - Minimum length (12+ characters recommended)
+  - Complexity requirements (uppercase, lowercase, numbers, symbols)
+  - Password history to prevent reuse
+  - Regular password rotation policies
+  - Account lockout after failed attempts
+</Note>
+
+### Credential Management
+
+<Tip>
+  **Production Credential Guidelines**:
+  
+  - Use service accounts with minimal required permissions
+  - Implement credential rotation schedules
+  - Audit credential access regularly
+  - Use separate credentials for development, staging, and production
+  - Document credential owners and expiration dates
+  - Implement automated alerts for credential expiration
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="JWT Tokens" icon="key" href="/auth/jwt-tokens">
+    Learn about JWT token implementation and lifecycle
+  </Card>
+  
+  <Card title="Authentication Overview" icon="shield" href="/auth/overview">
+    Return to the authentication system overview
+  </Card>
+</CardGroup>

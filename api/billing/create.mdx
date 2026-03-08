@@ -1,0 +1,182 @@
+---
+title: "Create Billing"
+api: "POST /api/billings"
+description: "Manually create a new billing record. Note: Billings are typically created automatically via system hooks, but this endpoint allows for exceptional manual creation"
+---
+
+## Authentication
+
+This endpoint requires JWT authentication. Include the token in the Authorization header:
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+## Request Body
+
+<ParamField body="ClientId" type="integer" required>
+  The ID of the client to be billed
+</ParamField>
+
+<ParamField body="due_date" type="date" optional>
+  Payment due date in ISO 8601 format (YYYY-MM-DD or full ISO timestamp)
+</ParamField>
+
+<ParamField body="total_value" type="decimal" optional>
+  Total billing amount with up to 2 decimal places. If not provided, defaults to 0.00
+</ParamField>
+
+<ParamField body="status" type="string" optional>
+  Initial status of the billing. Possible values:
+  - `pendente` - Pending payment (default)
+  - `pago` - Paid
+  - `cancelado` - Cancelled
+</ParamField>
+
+<ParamField body="method" type="enum" optional>
+  Payment method for this billing. Possible values:
+  - `Pix` - Instant payment
+  - `Boleto` - Bank slip (default)
+  - `Cartão` - Credit/debit card
+  - `Transferência` - Bank transfer
+  - `Espécie` - Cash
+</ParamField>
+
+<ParamField body="BankAccountId" type="integer" optional>
+  The ID of the bank account that will receive the payment
+</ParamField>
+
+## Response
+
+Returns the created billing object with a 201 Created status.
+
+<ResponseField name="id" type="integer">
+  Unique identifier for the newly created billing
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status of the billing (defaults to `pendente`)
+</ResponseField>
+
+<ResponseField name="total_value" type="decimal">
+  Total billing amount with 2 decimal places precision
+</ResponseField>
+
+<ResponseField name="due_date" type="date">
+  Payment due date in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="payment_date" type="date" optional>
+  Actual payment date (null for new billings unless status is `pago`)
+</ResponseField>
+
+<ResponseField name="method" type="enum">
+  Payment method for this billing
+</ResponseField>
+
+<ResponseField name="ClientId" type="integer">
+  Foreign key reference to the Client being billed
+</ResponseField>
+
+<ResponseField name="BankAccountId" type="integer" optional>
+  Foreign key reference to the BankAccount for receiving payment
+</ResponseField>
+
+<ResponseField name="createdAt" type="date">
+  Timestamp when the billing was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="date">
+  Timestamp when the billing was last updated
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X POST "https://api.devefficiency.com/api/billings" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ClientId": 5,
+    "due_date": "2026-04-15",
+    "total_value": 2500.00,
+    "status": "pendente",
+    "method": "Boleto",
+    "BankAccountId": 2
+  }'
+```
+
+```bash Minimal Request
+curl -X POST "https://api.devefficiency.com/api/billings" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ClientId": 5
+  }'
+```
+
+```bash Pix Payment
+curl -X POST "https://api.devefficiency.com/api/billings" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ClientId": 8,
+    "due_date": "2026-03-25T23:59:59.000Z",
+    "total_value": 1850.50,
+    "method": "Pix",
+    "BankAccountId": 3
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 201 Created
+{
+  "id": 43,
+  "status": "pendente",
+  "total_value": "2500.00",
+  "due_date": "2026-04-15T00:00:00.000Z",
+  "payment_date": null,
+  "method": "Boleto",
+  "ClientId": 5,
+  "BankAccountId": 2,
+  "createdAt": "2026-03-08T10:30:00.000Z",
+  "updatedAt": "2026-03-08T10:30:00.000Z"
+}
+```
+
+```json 400 Bad Request
+{
+  "error": "Validation Error",
+  "message": "Invalid payment method. Must be one of: Pix, Boleto, Cartão, Transferência, Espécie"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Not Found",
+  "message": "Client with id 999 not found"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- **Important**: Billings are normally created automatically by the system through hooks when protocols are generated. This endpoint should only be used for exceptional manual billing creation.
+- The `ClientId` is the only required field. All other fields have sensible defaults:
+  - `status`: defaults to `pendente`
+  - `total_value`: defaults to 0.00
+  - `method`: defaults to `Boleto`
+- When creating a billing, you typically need to also create associated `BillingProtocol` records to link the billing to specific protocols/services
+- The billing hooks system may automatically trigger actions after creation (see `billingHooks.afterUpdate` in the model)
+- Date values can be provided in various ISO 8601 formats:
+  - Simple date: `2026-04-15`
+  - Full timestamp: `2026-04-15T23:59:59.000Z`
+- Payment methods are strictly validated against the enum values defined in the model
+- The response does not include nested Client or BillingProtocol relationships. Use `GET /api/billings/:id` to retrieve the full details

@@ -1,0 +1,205 @@
+---
+title: "Update Service Order"
+api: "PUT /api/os/:id"
+description: "Update an existing service order's details and status"
+---
+
+## Authentication
+
+This endpoint requires a valid JWT token in the Authorization header.
+
+```bash
+Authorization: Bearer <your_jwt_token>
+```
+
+## Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the service order to update.
+</ParamField>
+
+## Request Body
+
+<ParamField body="subject" type="string">
+  Updated subject or title of the service order. Maximum length is 128 characters.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Updated detailed description of the service order.
+</ParamField>
+
+<ParamField body="status" type="string">
+  Updated status of the service order. Changing to certain statuses will automatically update the associated protocol status.
+  
+  <Expandable title="Valid status values">
+    - `Em avaliação` - Under evaluation
+    - `Orçamento enviado` - Quote sent to client
+    - `Na fila` - In queue for processing
+    - `Em correções` - Under corrections
+    - `Pendente` - Pending
+    - `Finalizado` - Completed (automatically sets protocol status to `Fechado`)
+    - `Cancelado` - Cancelled (automatically sets protocol status to `Cancelado`)
+  </Expandable>
+</ParamField>
+
+## Response
+
+Returns the updated service order object.
+
+<ResponseField name="id" type="number">
+  Unique identifier of the service order.
+</ResponseField>
+
+<ResponseField name="subject" type="string">
+  Updated subject of the service order.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Updated description of the service order.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Updated status of the service order.
+</ResponseField>
+
+<ResponseField name="ProjectId" type="number">
+  ID of the associated project (cannot be changed via update).
+</ResponseField>
+
+<ResponseField name="ClientId" type="number">
+  ID of the associated client (cannot be changed via update).
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when the service order was originally created.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when the service order was last updated.
+</ResponseField>
+
+## Example Request
+
+```bash Update Status
+curl -X PUT "https://api.devefficiency.com/api/os/123" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "Orçamento enviado"
+  }'
+```
+
+```bash Update Description and Subject
+curl -X PUT "https://api.devefficiency.com/api/os/123" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "Website optimization - Phase 2",
+    "description": "Continuing optimization work with focus on database query performance and image compression."
+  }'
+```
+
+```bash Complete Service Order
+curl -X PUT "https://api.devefficiency.com/api/os/123" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "Finalizado",
+    "description": "All optimization tasks completed. Load time reduced from 8s to 1.5s."
+  }'
+```
+
+```bash Cancel Service Order
+curl -X PUT "https://api.devefficiency.com/api/os/123" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "Cancelado",
+    "description": "Cancelled per client request - project scope changed."
+  }'
+```
+
+## Example Response
+
+```json 200 - Success
+{
+  "id": 123,
+  "subject": "Website optimization - Phase 2",
+  "description": "Continuing optimization work with focus on database query performance and image compression.",
+  "status": "Na fila",
+  "ProjectId": 45,
+  "ClientId": 12,
+  "createdAt": "2026-03-08T10:30:00.000Z",
+  "updatedAt": "2026-03-08T16:22:15.000Z"
+}
+```
+
+```json 401 - Unauthorized
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "message": "Missing or invalid authentication token"
+}
+```
+
+```json 404 - Not Found
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Service order with ID 123 not found"
+}
+```
+
+```json 400 - Bad Request
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Invalid status value"
+}
+```
+
+## Error Responses
+
+<ResponseField name="statusCode" type="number">
+  HTTP status code of the error.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error type description.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Detailed error message explaining what went wrong.
+</ResponseField>
+
+## Protocol Status Synchronization
+
+When updating a service order's status, the associated protocol status is automatically synchronized:
+
+<Expandable title="Status Mapping">
+  | Service Order Status | Protocol Status |
+  |---------------------|----------------|
+  | `Finalizado` | `Fechado` (Closed) |
+  | `Cancelado` | `Cancelado` (Cancelled) |
+  | Other statuses | No automatic change |
+</Expandable>
+
+This ensures that billing and work tracking (via the Protocol) stay in sync with the service order lifecycle.
+
+## Transaction Safety
+
+Updates to both the service order and its associated protocol are performed within a database transaction. This means:
+
+- Either both updates succeed, or neither does (atomic operation)
+- No partial updates that could leave data in an inconsistent state
+- If any error occurs during the update, all changes are rolled back
+
+## Notes
+
+- Only the `subject`, `description`, and `status` fields can be updated via this endpoint
+- The `ProjectId` and `ClientId` cannot be changed after creation
+- All fields in the request body are optional - you can update just one field at a time
+- Setting status to `Finalizado` or `Cancelado` automatically closes or cancels the associated protocol
+- The update operation is transactional, ensuring data consistency
+- The `updatedAt` timestamp is automatically updated to reflect when the change was made
+- Maximum subject length is 128 characters

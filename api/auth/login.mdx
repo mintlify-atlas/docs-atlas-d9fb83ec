@@ -1,0 +1,109 @@
+---
+title: 'Login'
+api: 'POST /auth'
+description: 'Authenticate a user and receive an access token'
+---
+
+## Description
+
+Authenticates a user with username and password credentials. Upon successful authentication, returns a bearer token that can be used to access protected endpoints.
+
+<Note>
+  The token expires after 1 hour. Use the refresh endpoint to obtain a new token before expiration.
+</Note>
+
+## Request Body
+
+<ParamField body="username" type="string" required>
+  The user's unique username
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The user's password (will be compared against the bcrypt-hashed password stored in the database)
+</ParamField>
+
+## Response
+
+<ResponseField name="type" type="string">
+  The token type, always returns `"bearer"`
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  The JWT access token to be used in subsequent authenticated requests
+</ResponseField>
+
+<ResponseField name="expires_in" type="number">
+  Unix timestamp (in milliseconds) indicating when the token will expire (1 hour from issuance)
+</ResponseField>
+
+## Error Responses
+
+<ResponseField name="error" type="boolean">
+  Indicates whether an error occurred (always `true` for error responses)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### Status Codes
+
+- `200` - Successful authentication
+- `401` - Invalid username or password
+
+## Example Request
+
+```bash
+curl -X POST https://api.devefficiency.com/auth \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john.doe",
+    "password": "secure_password_123"
+  }'
+```
+
+## Example Response
+
+### Success Response (200)
+
+```json
+{
+  "type": "bearer",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjp7ImlkIjoxLCJ1c2VybmFtZSI6ImpvaG4uZG9lIiwiY3JlYXRlZEF0IjoiMjAyNi0wMS0xNVQxMDozMDowMC4wMDBaIiwidXBkYXRlZEF0IjoiMjAyNi0wMS0xNVQxMDozMDowMC4wMDBaIn0sImlhdCI6MTcwNTMxNTgwMCwiZXhwIjoxNzA1MzE5NDAwfQ.abc123xyz789",
+  "expires_in": 1705319400000
+}
+```
+
+### Error Response (401)
+
+```json
+{
+  "error": true,
+  "message": "Usuário ou senha invalidos."
+}
+```
+
+<Warning>
+  The password is validated using bcrypt comparison. Ensure passwords are securely transmitted over HTTPS.
+</Warning>
+
+## Authentication Flow
+
+1. Send POST request with username and password
+2. Server validates credentials against the database
+3. If valid, server generates a JWT token signed with the server's secret key
+4. Token includes the full user object (id, username, timestamps) in the payload
+5. Token is set to expire in 1 hour
+6. Client stores the token and includes it in subsequent requests
+
+## Implementation Details
+
+The endpoint performs the following operations (see `authController.ts:17-37`):
+
+1. Extracts `username` and `password` from request body
+2. Queries the database for a user with matching username
+3. Returns 401 error if user not found
+4. Compares provided password with stored bcrypt hash
+5. Returns 401 error if passwords don't match
+6. Generates JWT token containing user object
+7. Returns token with type and expiration timestamp

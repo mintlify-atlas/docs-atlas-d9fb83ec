@@ -1,0 +1,277 @@
+---
+title: 'Email Notifications'
+description: 'Configure and send email notifications using Nodemailer'
+icon: 'envelope'
+---
+
+## Overview
+
+The DevEfficiency system uses **Nodemailer** to send email notifications for critical events such as monitoring alerts and client communications. Email configuration is managed through environment variables and the system automatically includes CC recipients on all outgoing emails.
+
+## Email Configuration
+
+### Environment Variables
+
+Configure email settings in your `.env` file:
+
+```bash .env.example
+EMAIL_FROM=user@system.com
+EMAIL_NAME=User
+
+EMAIL_USER=user@example.com
+EMAIL_PASS=email_pass
+EMAIL_HOST=localhost
+
+EMAIL_CC=admin@example.com
+```
+
+<Info>
+All environment variables are required for email functionality to work properly.
+</Info>
+
+### Configuration Parameters
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `EMAIL_FROM` | Sender email address | `user@system.com` |
+| `EMAIL_NAME` | Display name for sender | `User` |
+| `EMAIL_USER` | SMTP authentication username | `user@example.com` |
+| `EMAIL_PASS` | SMTP authentication password | `email_pass` |
+| `EMAIL_HOST` | SMTP server hostname | `localhost` |
+| `EMAIL_CC` | Carbon copy recipient (auto-added to all emails) | `admin@example.com` |
+
+## Nodemailer Setup
+
+The email transport is configured in `src/utils/sendEmail.ts:3`:
+
+```typescript src/utils/sendEmail.ts
+import nodemialer from 'nodemailer'
+
+const transporter = nodemialer.createTransport({
+    host: process.env.EMAIL_HOST,
+    secure: false,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+})
+```
+
+<Warning>
+The transport uses `secure: false` for non-SSL connections. Ensure your SMTP server supports this configuration or modify for TLS/SSL connections.
+</Warning>
+
+## Sending Email Notifications
+
+### sendMail Function
+
+The primary email sending utility accepts recipients, subject, and HTML content:
+
+```typescript src/utils/sendEmail.ts
+export default function sendMail(to: string[] | string, subject: string, html: string): void {
+    if (!Array.isArray(to)) to = to.split(',')
+
+    to.push(process.env.EMAIL_CC as string)
+    to = to.join(',')
+
+    const from = `${process.env.EMAIL_NAME} <${process.env.EMAIL_FROM}>`
+
+    transporter.sendMail(
+        {
+            from,
+            to,
+            subject,
+            html,
+        },
+        function (err, info) {
+            if (err) {
+                console.log(err)
+            } else {
+                console.log('[+] Email enviado: ' + info.response)
+            }
+        },
+    )
+}
+```
+
+### Key Features
+
+<Steps>
+
+<Step title="Flexible Recipients">
+Accepts recipients as either an array of email addresses or a comma-separated string.
+</Step>
+
+<Step title="Automatic CC">
+Automatically appends the `EMAIL_CC` address from environment variables to all outgoing emails for administrative oversight.
+</Step>
+
+<Step title="Formatted Sender">
+Combines `EMAIL_NAME` and `EMAIL_FROM` to create a user-friendly sender display (e.g., "User &lt;user@system.com&gt;").
+</Step>
+
+<Step title="HTML Support">
+Supports rich HTML content for formatted email messages.
+</Step>
+
+</Steps>
+
+## Usage Examples
+
+### Monitoring Alerts
+
+The checks worker (`src/workers/checksWorker.ts:42`) sends email notifications when monitoring checks fail:
+
+```typescript src/workers/checksWorker.ts
+if (!c) {
+    check.status = 'Error'
+
+    if (check.send_alert)
+        sendMail(
+            check.Project.Client.email,
+            `[${check.Project.name}] - ${check.description}`,
+            check.message,
+        )
+} else {
+    check.status = 'OK'
+}
+```
+
+<Info>
+Monitoring alerts are only sent when `send_alert` is enabled on the check and the status transitions from OK to Error.
+</Info>
+
+### Single Recipient
+
+```typescript
+import sendMail from './utils/sendEmail'
+
+sendMail(
+    'client@example.com',
+    'Service Notification',
+    '<h1>Your service order has been updated</h1>'
+)
+```
+
+### Multiple Recipients
+
+```typescript
+import sendMail from './utils/sendEmail'
+
+sendMail(
+    ['client1@example.com', 'client2@example.com'],
+    'System Alert',
+    '<p>This is a system-wide notification.</p>'
+)
+```
+
+### Comma-Separated String
+
+```typescript
+import sendMail from './utils/sendEmail'
+
+sendMail(
+    'user1@example.com,user2@example.com',
+    'Bulk Notification',
+    '<p>Message sent to multiple users.</p>'
+)
+```
+
+## Error Handling
+
+Email sending errors are logged to the console but do not throw exceptions. This allows the application to continue operating even if email delivery fails:
+
+```typescript
+if (err) {
+    console.log(err)
+} else {
+    console.log('[+] Email enviado: ' + info.response)
+}
+```
+
+<Tip>
+Monitor your application logs for email errors to ensure notifications are being delivered successfully.
+</Tip>
+
+## Best Practices
+
+### Testing Configuration
+
+Test your email configuration during development using a local SMTP server or service like Mailtrap:
+
+```bash
+EMAIL_HOST=smtp.mailtrap.io
+EMAIL_USER=your_mailtrap_user
+EMAIL_PASS=your_mailtrap_pass
+```
+
+### Production Security
+
+<Warning>
+Never commit your `.env` file with production credentials. Use secure environment variable management in production.
+</Warning>
+
+### HTML Email Templates
+
+Create reusable HTML templates for consistent email formatting:
+
+```typescript
+const emailTemplate = (content: string) => `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body { font-family: Arial, sans-serif; }
+            .container { padding: 20px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            ${content}
+        </div>
+    </body>
+    </html>
+`
+
+sendMail(
+    'client@example.com',
+    'Notification',
+    emailTemplate('<h1>Important Update</h1><p>Your order is ready.</p>')
+)
+```
+
+## Troubleshooting
+
+### Emails Not Sending
+
+1. Verify all environment variables are set correctly
+2. Check SMTP server connectivity and credentials
+3. Review application logs for error messages
+4. Test SMTP connection using a tool like `telnet` or `swaks`
+
+### Connection Refused
+
+If you receive "Connection refused" errors:
+
+- Verify `EMAIL_HOST` is correct and accessible
+- Check firewall rules allow SMTP traffic
+- Ensure SMTP port (default 25 or 587) is not blocked
+
+### Authentication Failed
+
+For authentication errors:
+
+- Double-check `EMAIL_USER` and `EMAIL_PASS` credentials
+- Verify the SMTP server requires authentication
+- Some providers require app-specific passwords (e.g., Gmail)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PDF Generation" icon="file-pdf" href="/integration/pdf-generation">
+    Learn how to generate PDF documents
+  </Card>
+  <Card title="Database Setup" icon="database" href="/integration/database">
+    Configure database connections
+  </Card>
+</CardGroup>

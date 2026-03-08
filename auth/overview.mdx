@@ -1,0 +1,246 @@
+---
+title: 'Authentication Overview'
+description: 'Comprehensive guide to the JWT-based authentication system in DevEfficiency'
+---
+
+## Introduction
+
+DevEfficiency implements a robust JWT (JSON Web Token) based authentication system built on Fastify. The authentication layer provides secure access control for all API endpoints, with built-in rate limiting, security headers, and middleware-based request validation.
+
+## Architecture Overview
+
+The authentication system consists of several key components:
+
+- **JWT Token Generation**: Secure token creation with configurable expiration
+- **Password Hashing**: bcrypt-based password security
+- **Middleware Protection**: Route-level authentication using preHandler hooks
+- **Rate Limiting**: Request throttling to prevent abuse
+- **Security Headers**: Helmet integration for enhanced security
+
+## Authentication Flow
+
+<Steps>
+  <Step title="User Login">
+    The client sends credentials (username and password) to the `/api/auth` endpoint. The server validates credentials against the User model stored in the database.
+  </Step>
+  
+  <Step title="Password Verification">
+    The system uses bcrypt to compare the provided password with the hashed password stored in the database. This ensures passwords are never stored in plain text.
+  </Step>
+  
+  <Step title="Token Generation">
+    Upon successful authentication, a JWT token is generated with a 1-hour expiration time. The token includes the user object and is signed with a secret key from environment variables.
+  </Step>
+  
+  <Step title="Token Usage">
+    The client includes the JWT token in the `Authorization` header for subsequent requests. Protected routes verify the token using the `isAuthed` middleware.
+  </Step>
+  
+  <Step title="Token Verification">
+    The middleware extracts and verifies the token, decoding the user information and attaching it to the request object for use in route handlers.
+  </Step>
+</Steps>
+
+## Security Configuration
+
+The application implements multiple security layers configured in `src/app.ts`:
+
+### Helmet Security Headers
+
+<CodeGroup>
+```typescript src/app.ts
+import helmet from '@fastify/helmet'
+
+app.register(helmet, {
+    contentSecurityPolicy: false,
+    referrerPolicy: false,
+})
+```
+</CodeGroup>
+
+<Info>
+  Helmet provides security headers that help protect against common vulnerabilities like XSS attacks, clickjacking, and other code injection attacks.
+</Info>
+
+### Rate Limiting
+
+To prevent abuse and brute-force attacks, the API implements rate limiting:
+
+<CodeGroup>
+```typescript src/app.ts
+import rateLimit from '@fastify/rate-limit'
+
+app.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+})
+```
+</CodeGroup>
+
+<Warning>
+  Each client IP is limited to **100 requests per minute**. Exceeding this limit will result in a 429 (Too Many Requests) response.
+</Warning>
+
+## PreHandler Hooks
+
+DevEfficiency uses Fastify's preHandler hooks to initialize request context and enforce authentication:
+
+### Global User Context
+
+<CodeGroup>
+```typescript src/app.ts
+app.addHook('preHandler', (req, reply, done) => {
+    req.__user = {}
+    
+    done()
+})
+```
+</CodeGroup>
+
+This global hook ensures every request has a `__user` property available, which is populated by the authentication middleware when applicable.
+
+### Route-Level Authentication
+
+Protected routes use the `isAuthed` middleware as a preHandler:
+
+<CodeGroup>
+```typescript src/routes.ts
+import isAuthed from './middlewares/isAuthed'
+
+// Public endpoint - no authentication required
+instance.post('/auth', authController.auth)
+
+// Protected endpoint - requires valid JWT token
+instance.get('/auth/verify', { preHandler: [isAuthed] }, authController.verify)
+
+// Protected resource endpoints
+instance.get('/clients', { preHandler: [isAuthed] }, clientController.index)
+instance.post('/clients', { preHandler: [isAuthed] }, clientController.store)
+```
+</CodeGroup>
+
+<Tip>
+  The `preHandler` array allows you to chain multiple middleware functions. Authentication middleware runs before the route handler, ensuring only authenticated requests reach protected resources.
+</Tip>
+
+## Authentication Endpoints
+
+The API exposes three authentication-related endpoints:
+
+| Endpoint | Method | Protection | Description |
+|----------|--------|------------|-------------|
+| `/api/auth` | POST | Public | User login and token generation |
+| `/api/auth/refresh` | POST | Public | Token refresh (same as login) |
+| `/api/auth/verify` | GET | Protected | Token verification and validation |
+
+### Login Example
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.devefficiency.com/api/auth \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "password": "securepassword"
+  }'
+```
+
+```json Response
+{
+  "type": "bearer",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_in": 1709899200000
+}
+```
+</CodeGroup>
+
+### Protected Request Example
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.devefficiency.com/api/clients \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+</CodeGroup>
+
+<Note>
+  The Authorization header accepts both `Bearer` and `bearer` prefixes, which are automatically stripped by the middleware.
+</Note>
+
+## Environment Configuration
+
+Authentication requires the following environment variable:
+
+```bash .env
+SECRET=your-secret-key-here
+```
+
+<Warning>
+  The `SECRET` environment variable is critical for JWT signing and verification. Use a strong, randomly generated secret in production and never commit it to version control.
+</Warning>
+
+## User Model Structure
+
+The User model defines the authentication entity:
+
+<CodeGroup>
+```typescript src/models/User.ts
+class User extends Model<InferAttributes<User>, InferCreationAttributes<User>> {
+    declare id: CreationOptional<number>
+    declare username: string
+    declare password: string
+    
+    declare createdAt: CreationOptional<Date>
+    declare updatedAt: CreationOptional<Date>
+}
+
+User.init(
+    {
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        username: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+            unique: true,
+        },
+        password: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+        },
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    },
+    {
+        tableName: 'users',
+        sequelize: db,
+    },
+)
+```
+</CodeGroup>
+
+<Info>
+  Usernames are unique and indexed in the database. Passwords are hashed with bcrypt before storage and never exposed in API responses.
+</Info>
+
+## Error Handling
+
+The authentication system returns clear error messages:
+
+- **401 Unauthorized**: Invalid credentials or missing/expired token
+- **429 Too Many Requests**: Rate limit exceeded
+- **500 Internal Server Error**: Server-side authentication errors
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="JWT Tokens" icon="key" href="/auth/jwt-tokens">
+    Learn about token generation, refresh, and verification
+  </Card>
+  
+  <Card title="User Management" icon="users" href="/auth/user-management">
+    Explore credential management and password security
+  </Card>
+</CardGroup>

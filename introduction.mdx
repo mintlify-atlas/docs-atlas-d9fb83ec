@@ -1,0 +1,104 @@
+---
+title: "Introduction"
+description: "Welcome to DevEfficiency - A comprehensive service request management system designed for developers"
+---
+
+## What is DevEfficiency?
+
+DevEfficiency is a full-featured service request management platform that streamlines the workflow from client onboarding through service delivery, billing, and financial reporting. Built with modern web technologies, it provides developers with a robust system for managing client relationships, project workflows, and business operations.
+
+<CardGroup cols={2}>
+  <Card title="Service Order Management" icon="clipboard-list" href="/features/service-orders">
+    Track service requests through multiple status workflows
+  </Card>
+  <Card title="Billing & Protocols" icon="file-invoice-dollar" href="/features/billing">
+    Generate invoices and manage payment protocols
+  </Card>
+  <Card title="Client Management" icon="users" href="/features/client-management">
+    Maintain comprehensive client and contact records
+  </Card>
+  <Card title="Financial Tracking" icon="chart-line" href="/features/financial-management">
+    Track expenses, bank accounts, and generate reports
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<AccordionGroup>
+  <Accordion title="Multi-Status Service Orders" icon="workflow">
+    Service orders progress through customizable status workflows: Em avaliação, Orçamento enviado, Na fila, Em correções, Pendente, Finalizado, and Cancelado. Each status transition can trigger automated actions and notifications.
+  </Accordion>
+  
+  <Accordion title="Protocol System" icon="file-contract">
+    Protocols link service orders to billing cycles with support for multiple products, time-based registers, and receipts. Track protocol status from Em aberto through Liberado para pagamento to Fechado or Cancelado.
+  </Accordion>
+  
+  <Accordion title="PDF Generation" icon="file-pdf">
+    Automatically generate professional PDF documents for service orders, billing statements, and protocols using Puppeteer with customizable EJS templates.
+  </Accordion>
+  
+  <Accordion title="Financial Management" icon="money-bill-wave">
+    Complete financial tracking with bank accounts, payables, cost centers, bank transfers, and comprehensive reporting including DRE (Demonstração do Resultado do Exercício) and expense reports.
+  </Accordion>
+  
+  <Accordion title="JWT Authentication" icon="shield-halved">
+    Secure JWT-based authentication with token refresh capabilities, rate limiting, and security headers via Fastify middleware.
+  </Accordion>
+  
+  <Accordion title="Email Notifications" icon="envelope">
+    Automated email notifications powered by Nodemailer for important events like status changes, billing reminders, and protocol updates.
+  </Accordion>
+</AccordionGroup>
+
+## Quick Links
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/getting-started/installation">
+    Get DevEfficiency up and running with Docker or Node.js
+  </Card>
+  <Card title="Configuration" icon="gear" href="/getting-started/configuration">
+    Configure database, email, and environment settings
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/auth/login">
+    Explore the complete REST API documentation
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Understand the system architecture and technology stack
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+DevEfficiency is built on a modern, production-ready technology stack:
+
+- **Backend**: Fastify (Node.js/TypeScript) with rate limiting and security headers
+- **Database**: MySQL 8.4 with Sequelize ORM and TypeScript decorators
+- **Authentication**: JWT tokens with bcrypt password hashing
+- **PDF Generation**: Puppeteer with EJS templating
+- **Email**: Nodemailer for SMTP-based notifications
+- **Frontend**: Server-side rendered HTML/EJS with static assets
+- **Deployment**: Docker and Docker Compose support
+
+<Note>
+DevEfficiency requires Node.js 18+ and MySQL 8.4+ for optimal compatibility.
+</Note>
+
+## Getting Started
+
+Ready to get started? Follow our quickstart guide:
+
+<Steps>
+  <Step title="Install Dependencies">
+    Clone the repository and install dependencies with npm, yarn, or pnpm
+  </Step>
+  <Step title="Configure Environment">
+    Set up your database connection, email credentials, and JWT secret
+  </Step>
+  <Step title="Deploy">
+    Launch with Docker Compose or run directly with Node.js
+  </Step>
+</Steps>
+
+<Card title="Begin Installation" icon="rocket" href="/getting-started/installation">
+  Start setting up DevEfficiency now
+</Card>

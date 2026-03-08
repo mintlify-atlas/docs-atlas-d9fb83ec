@@ -1,0 +1,116 @@
+---
+title: 'Refresh Token'
+api: 'POST /auth/refresh'
+description: 'Refresh an expired or expiring access token'
+---
+
+## Description
+
+Refreshes an access token by re-authenticating with username and password credentials. This endpoint uses the same authentication logic as the login endpoint to issue a new token.
+
+<Note>
+  This endpoint currently requires username and password (same as login). It does not use a dedicated refresh token mechanism.
+</Note>
+
+## Request Body
+
+<ParamField body="username" type="string" required>
+  The user's unique username
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The user's password (will be compared against the bcrypt-hashed password stored in the database)
+</ParamField>
+
+## Response
+
+<ResponseField name="type" type="string">
+  The token type, always returns `"bearer"`
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  The new JWT access token to replace the expired or expiring token
+</ResponseField>
+
+<ResponseField name="expires_in" type="number">
+  Unix timestamp (in milliseconds) indicating when the new token will expire (1 hour from issuance)
+</ResponseField>
+
+## Error Responses
+
+<ResponseField name="error" type="boolean">
+  Indicates whether an error occurred (always `true` for error responses)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message describing what went wrong
+</ResponseField>
+
+### Status Codes
+
+- `200` - Successful token refresh
+- `401` - Invalid username or password
+
+## Example Request
+
+```bash
+curl -X POST https://api.devefficiency.com/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john.doe",
+    "password": "secure_password_123"
+  }'
+```
+
+## Example Response
+
+### Success Response (200)
+
+```json
+{
+  "type": "bearer",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjp7ImlkIjoxLCJ1c2VybmFtZSI6ImpvaG4uZG9lIiwiY3JlYXRlZEF0IjoiMjAyNi0wMS0xNVQxMDozMDowMC4wMDBaIiwidXBkYXRlZEF0IjoiMjAyNi0wMS0xNVQxMDozMDowMC4wMDBaIn0sImlhdCI6MTcwNTMxOTQwMCwiZXhwIjoxNzA1MzIzMDAwfQ.def456uvw012",
+  "expires_in": 1705323000000
+}
+```
+
+### Error Response (401)
+
+```json
+{
+  "error": true,
+  "message": "Usuário ou senha invalidos."
+}
+```
+
+<Warning>
+  This endpoint uses the same authentication controller method as `/auth` (login). Consider implementing a dedicated refresh token mechanism for improved security.
+</Warning>
+
+## Token Refresh Strategy
+
+Since this endpoint requires full credentials, consider these best practices:
+
+1. **Refresh Before Expiration**: Request a new token before the current one expires
+2. **Secure Storage**: Store credentials securely if implementing automatic refresh
+3. **Monitor Expiration**: Track the `expires_in` timestamp to trigger refresh proactively
+4. **Handle 401 Errors**: Catch authentication errors and prompt for re-login
+
+## Implementation Details
+
+The endpoint is implemented in `routes.ts:40` and uses the same controller method as the login endpoint:
+
+```typescript
+instance.post('/auth/refresh', authController.auth)
+```
+
+This means the refresh endpoint (see `authController.ts:17-37`):
+
+1. Validates username and password
+2. Queries the database for user verification
+3. Generates a new JWT token with 1-hour expiration
+4. Returns the new token with updated expiration timestamp
+
+<Note>
+  Future Enhancement: Implementing a dedicated refresh token mechanism would allow token refresh without re-transmitting user credentials, improving security.
+</Note>

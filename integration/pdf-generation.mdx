@@ -1,0 +1,627 @@
+---
+title: 'PDF Generation'
+description: 'Generate PDF documents using Puppeteer and EJS templates'
+icon: 'file-pdf'
+---
+
+## Overview
+
+DevEfficiency uses **Puppeteer** and **EJS** templates to generate professional PDF documents for service orders, billing invoices, and protocols. The system renders HTML templates with dynamic data and converts them to PDF using headless Chrome.
+
+## Architecture
+
+The PDF generation workflow consists of three main components:
+
+<Steps>
+
+<Step title="Data Retrieval">
+Fetch complete records with all related data using Sequelize associations.
+</Step>
+
+<Step title="Template Rendering">
+Render EJS templates with data and configuration to produce HTML.
+</Step>
+
+<Step title="PDF Conversion">
+Use Puppeteer to convert the rendered HTML to PDF format.
+</Step>
+
+</Steps>
+
+## Dependencies
+
+```json package.json
+{
+  "dependencies": {
+    "puppeteer": "^latest",
+    "ejs": "^latest"
+  }
+}
+```
+
+<Info>
+Puppeteer requires Google Chrome or Chromium installed on the system. The application uses `/usr/bin/google-chrome` as the executable path.
+</Info>
+
+## Service Order PDFs
+
+### Implementation
+
+Service order PDFs include complete order details, protocols, products, and billing information (`src/controllers/serviceOrdersController.ts:112`):
+
+```typescript src/controllers/serviceOrdersController.ts
+static async pdf(req: serviceOrdersRequest, res: FastifyReply) {
+    const { id } = req.params
+
+    const os = await Service_order.findByPk(id, {
+        include: [
+            Client,
+            {
+                model: Protocol,
+                include: [Protocol_register, Receipts, { model: Protocol_product, include: [Product] }],
+            },
+            { model: Project, include: [Client] },
+        ],
+    })
+
+    const config = await Config.findAll({})
+    const configMap: { [key: string]: string | null } = {}
+    config.forEach((cfg) => {
+        if (cfg.upload) {
+            const file = fs.readFileSync(path.join(process.cwd(), 'tmp', cfg.value))
+            const extension = path.extname(cfg.value).substring(1)
+
+            //is image?
+            if (['png', 'jpg', 'jpeg', 'gif'].includes(extension.toLowerCase())) {
+                const fileBase64 = Buffer.from(file).toString('base64')
+                configMap[cfg.type] = `data:image/${extension};base64,${fileBase64}`
+            } else {
+                configMap[cfg.type] = null
+            }
+        } else configMap[cfg.type] = cfg.value
+    })
+
+    const template = fs.readFileSync(path.resolve('src', 'views', 'budget.ejs'), 'utf-8')
+    const html = ejs.render(template, { os, configMap })
+
+    const browser = await puppeteer.launch({
+        headless: 'new',
+        executablePath: '/usr/bin/google-chrome',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+    })
+
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    await page.emulateMediaType('screen')
+    const pdf = await page.pdf()
+    await page.close()
+    await browser.close()
+
+    res.header('Content-Type', 'application/pdf')
+    res.header('Content-Disposition', `attachment; filename=os_${os?.id}_${Date.now()}.pdf`)
+
+    return res.send(pdf)
+}
+```
+
+### Key Features
+
+- **Complete Data Loading**: Uses Sequelize `include` to load all related entities in a single query
+- **Configuration Support**: Loads system configuration including company logos and branding
+- **Image Embedding**: Converts uploaded images to base64 for inline embedding in PDFs
+- **Dynamic Naming**: Generates unique filenames with service order ID and timestamp
+
+## Billing PDFs
+
+### Implementation
+
+Billing invoices aggregate multiple protocols and present detailed financial information (`src/controllers/billingController.ts:129`):
+
+```typescript src/controllers/billingController.ts
+static async pdf(req: billingRequest, res: FastifyReply) {
+    const { id } = req.params
+
+    const billing = await Billing.findByPk(id, {
+        include: [
+            Client,
+            {
+                model: BillingProtocol,
+                include: [
+                    {
+                        model: Protocol,
+                        include: [
+                            { model: Protocol_product, include: [Product] },
+                            Protocol_register,
+                            Receipts,
+                            {
+                                model: Service_order,
+                                include: [Project],
+                            },
+                            Subscription,
+                        ],
+                    },
+                ],
+            },
+        ],
+    })
+
+    const client = await Client.findByPk(billing?.ClientId)
+
+    const config = await Config.findAll({})
+    const configMap: { [key: string]: string | null } = {}
+    config.forEach((cfg) => {
+        if (cfg.upload) {
+            const file = fs.readFileSync(path.join(process.cwd(), 'tmp', cfg.value))
+            const extension = path.extname(cfg.value).substring(1)
+
+            //is image?
+            if (['png', 'jpg', 'jpeg', 'gif'].includes(extension.toLowerCase())) {
+                const fileBase64 = Buffer.from(file).toString('base64')
+                configMap[cfg.type] = `data:image/${extension};base64,${fileBase64}`
+            } else {
+                configMap[cfg.type] = null
+            }
+        } else configMap[cfg.type] = cfg.value
+    })
+
+    const template = fs.readFileSync(path.resolve('src', 'views', 'billing.ejs'), 'utf-8')
+    const html = ejs.render(template, { billing, client, configMap })
+
+    const browser = await puppeteer.launch({
+        headless: 'new',
+        executablePath: '/usr/bin/google-chrome',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+    })
+
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    await page.emulateMediaType('screen')
+    const pdf = await page.pdf()
+    await page.close()
+    await browser.close()
+
+    res.header('Content-Type', 'application/pdf')
+    res.header(
+        'Content-Disposition',
+        `attachment; filename=charge_${client?.name.toLowerCase().split(' ').join('_')}_${Date.now()}.pdf`,
+    )
+
+    return res.send(pdf)
+}
+```
+
+<Tip>
+Billing PDFs use client names in filenames, converting to lowercase and replacing spaces with underscores for web-safe filenames.
+</Tip>
+
+## Protocol PDFs
+
+### Multi-Protocol Export
+
+Protocol PDFs can export multiple protocols for a client in a single document (`src/controllers/protocolsController.ts:100`):
+
+```typescript src/controllers/protocolsController.ts
+static async pdf(req: protocolsRequest, res: FastifyReply) {
+    const { type = 'Liberado para pagamento', ClientId } = req.query
+
+    const client = await Client.findByPk(ClientId)
+    const oss = await client?.getService_orders({
+        include: [
+            {
+                model: Protocol,
+                include: [{ model: Protocol_product, include: [Product] }, Protocol_register, Receipts],
+                where: {
+                    status: type,
+                },
+            },
+            Project,
+        ],
+    })
+
+    const subscriptions = await client?.getSubscriptions({
+        include: [
+            {
+                model: Protocol,
+                include: [{ model: Protocol_product, include: [Product] }, Protocol_register, Receipts],
+                where: {
+                    status: type,
+                },
+            },
+            Project,
+        ],
+    })
+
+    const config = await Config.findAll({})
+    const configMap: { [key: string]: string | null } = {}
+    config.forEach((cfg) => {
+        if (cfg.upload) {
+            const file = fs.readFileSync(path.join(process.cwd(), 'tmp', cfg.value))
+            const extension = path.extname(cfg.value).substring(1)
+
+            //is image?
+            if (['png', 'jpg', 'jpeg', 'gif'].includes(extension.toLowerCase())) {
+                const fileBase64 = Buffer.from(file).toString('base64')
+                configMap[cfg.type] = `data:image/${extension};base64,${fileBase64}`
+            } else configMap[cfg.type] = null
+        } else configMap[cfg.type] = cfg.value
+    })
+
+    const template = fs.readFileSync(path.resolve('src', 'views', 'budget_multi.ejs'), 'utf-8')
+    const html = ejs.render(template, { oss, subscriptions, client, type, configMap })
+
+    const browser = await puppeteer.launch({
+        headless: 'new',
+        executablePath: '/usr/bin/google-chrome',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+    })
+
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    await page.emulateMediaType('screen')
+    const pdf = await page.pdf()
+    await page.close()
+    await browser.close()
+
+    res.header('Content-Type', 'application/pdf')
+    res.header(
+        'Content-Disposition',
+        `attachment; filename=protocols_${client?.name.toLowerCase().split(' ').join('_')}_${Date.now()}.pdf`,
+    )
+
+    return res.send(pdf)
+}
+```
+
+### Features
+
+- **Status Filtering**: Filter protocols by status (e.g., "Liberado para pagamento")
+- **Combined Data**: Includes both service orders and subscriptions in one document
+- **Client-Specific**: Generates comprehensive reports for specific clients
+
+## EJS Templates
+
+### Template Structure
+
+EJS templates are located in `src/views/` and use HTML/CSS for layout:
+
+<CodeGroup>
+
+```html src/views/budget.ejs
+<head>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #333;
+            line-height: 1.5;
+            margin: 0;
+            padding: 40px;
+            background-color: #fff;
+        }
+
+        .header-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 28px;
+            color: #1a1a1a;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        th {
+            text-align: left;
+            background-color: #f8f9fa;
+            color: #666;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 12px 10px;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header-nav">
+        <img src="<%= configMap['logo'] || 'https://placehold.co/80x40?text=Logo' %>" alt="Logo" width="80" />
+        <h1>
+            <%= ( os.Protocol?.status=="Em aberto" ? "Orçamento" : (os.Protocol?.status=="Liberado para pagamento"
+                ? "Fatura" : (os.Protocol?.status=="Fechado" ? "Recibo" : "Documento" ) ) ) %>
+        </h1>
+    </header>
+</body>
+```
+
+```html src/views/billing.ejs
+<head>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #333;
+            line-height: 1.5;
+            margin: 0;
+            padding: 40px;
+            background-color: #fff;
+        }
+
+        .header-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 26px;
+            color: #1a1a1a;
+            font-weight: 700;
+        }
+
+        .invoice-number {
+            color: #666;
+            font-size: 14px;
+            font-weight: 400;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header-nav">
+        <img src="<%= configMap['company_logo'] || 'https://placehold.co/80x40?text=Logo' %>" alt="Logo" width="80" />
+        <div class="billing-title">
+            <h1>Fatura Mensal</h1>
+            <span class="invoice-number">Referência: <%= billing.id %></span>
+        </div>
+    </header>
+</body>
+```
+
+</CodeGroup>
+
+### Template Variables
+
+**Service Orders** (`budget.ejs`):
+- `os`: Service order object with all related data
+- `configMap`: System configuration values
+
+**Billing** (`billing.ejs`):
+- `billing`: Billing object with protocols
+- `client`: Client information
+- `configMap`: System configuration values
+
+**Protocols** (`budget_multi.ejs`):
+- `oss`: Array of service orders
+- `subscriptions`: Array of subscriptions
+- `client`: Client information
+- `type`: Protocol status filter
+- `configMap`: System configuration values
+
+## Puppeteer Configuration
+
+### Launch Options
+
+Puppeteer is configured with specific arguments for server environments:
+
+```typescript
+const browser = await puppeteer.launch({
+    headless: 'new',
+    executablePath: '/usr/bin/google-chrome',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+})
+```
+
+<Warning>
+The `--no-sandbox` flag disables Chrome's sandboxing for compatibility in containerized environments. Only use this in trusted server environments.
+</Warning>
+
+### Configuration Options
+
+| Option | Value | Purpose |
+|--------|-------|----------|
+| `headless` | `'new'` | Uses new headless mode (Chrome 109+) |
+| `executablePath` | `/usr/bin/google-chrome` | Specifies Chrome binary location |
+| `--no-sandbox` | flag | Disables sandboxing for Docker/container support |
+| `--disable-setuid-sandbox` | flag | Additional sandbox disabling |
+| `--disable-gpu` | flag | Disables GPU acceleration |
+
+### Rendering Process
+
+```typescript
+const page = await browser.newPage()
+await page.setContent(html, { waitUntil: 'networkidle0' })
+await page.emulateMediaType('screen')
+const pdf = await page.pdf()
+await page.close()
+await browser.close()
+```
+
+<Steps>
+
+<Step title="Create Page">
+Creates a new browser page instance.
+</Step>
+
+<Step title="Set Content">
+Loads the rendered HTML, waiting until network is idle (no requests for 500ms).
+</Step>
+
+<Step title="Emulate Media">
+Sets media type to 'screen' for consistent rendering with web CSS.
+</Step>
+
+<Step title="Generate PDF">
+Converts the page to PDF format with default settings.
+</Step>
+
+<Step title="Cleanup">
+Closes the page and browser to free resources.
+</Step>
+
+</Steps>
+
+## Configuration Management
+
+### Loading Configuration
+
+All PDF controllers load system configuration for branding and company information:
+
+```typescript
+const config = await Config.findAll({})
+const configMap: { [key: string]: string | null } = {}
+config.forEach((cfg) => {
+    if (cfg.upload) {
+        const file = fs.readFileSync(path.join(process.cwd(), 'tmp', cfg.value))
+        const extension = path.extname(cfg.value).substring(1)
+
+        //is image?
+        if (['png', 'jpg', 'jpeg', 'gif'].includes(extension.toLowerCase())) {
+            const fileBase64 = Buffer.from(file).toString('base64')
+            configMap[cfg.type] = `data:image/${extension};base64,${fileBase64}`
+        } else {
+            configMap[cfg.type] = null
+        }
+    } else configMap[cfg.type] = cfg.value
+})
+```
+
+### Image Handling
+
+<Info>
+Images are converted to base64 data URIs for embedding directly in the PDF, eliminating external file dependencies.
+</Info>
+
+Supported image formats:
+- PNG
+- JPG/JPEG
+- GIF
+
+## Best Practices
+
+### Template Design
+
+1. **Use Web-Safe Fonts**: Include Google Fonts or system fonts
+2. **Inline Styles**: CSS should be in `<style>` tags within the template
+3. **Test Rendering**: Preview HTML before generating PDFs
+4. **Responsive Layouts**: Use flexbox/grid for consistent layouts
+
+### Performance Optimization
+
+```typescript
+// Reuse browser instance for multiple PDFs
+const browser = await puppeteer.launch({...})
+
+try {
+    for (const order of orders) {
+        const page = await browser.newPage()
+        // Generate PDF
+        await page.close()
+    }
+} finally {
+    await browser.close()
+}
+```
+
+<Tip>
+For bulk PDF generation, reuse the browser instance and only create/close pages to improve performance.
+</Tip>
+
+### Error Handling
+
+```typescript
+let browser
+try {
+    browser = await puppeteer.launch({...})
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 })
+    const pdf = await page.pdf()
+    await page.close()
+    return pdf
+} catch (error) {
+    console.error('PDF generation failed:', error)
+    throw new Error('Failed to generate PDF')
+} finally {
+    if (browser) await browser.close()
+}
+```
+
+## Troubleshooting
+
+### Chrome Not Found
+
+If Chrome is not found at `/usr/bin/google-chrome`:
+
+```bash
+# Install Chrome on Debian/Ubuntu
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo dpkg -i google-chrome-stable_current_amd64.deb
+sudo apt-get install -f
+
+# Or use Chromium
+sudo apt-get install chromium-browser
+```
+
+Update the `executablePath` to match your Chrome installation:
+
+```typescript
+executablePath: '/usr/bin/chromium-browser' // for Chromium
+```
+
+### Memory Issues
+
+For high-volume PDF generation:
+
+```typescript
+const browser = await puppeteer.launch({
+    headless: 'new',
+    executablePath: '/usr/bin/google-chrome',
+    args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-gpu',
+        '--disable-dev-shm-usage', // Overcome limited resource problems
+        '--disable-software-rasterizer',
+        '--max-old-space-size=4096' // Increase memory limit
+    ],
+})
+```
+
+### Template Rendering Issues
+
+Debug template rendering by returning HTML instead of PDF:
+
+```typescript
+// Temporarily return HTML for debugging
+return res.header('Content-Type', 'text/html').send(html)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Email Notifications" icon="envelope" href="/integration/email-notifications">
+    Configure email notifications
+  </Card>
+  <Card title="Database Setup" icon="database" href="/integration/database">
+    Set up database connections
+  </Card>
+</CardGroup>

@@ -1,0 +1,613 @@
+---
+title: Deployment
+description: Deploy DevEfficiency to production using Docker Compose or manual deployment methods
+---
+
+This guide covers deploying DevEfficiency to production environments using Docker Compose or traditional server deployment methods.
+
+## Deployment Options
+
+DevEfficiency can be deployed using:
+
+1. **Docker Compose** (Recommended) - Containerized deployment with MySQL
+2. **Manual Deployment** - Traditional server deployment
+3. **Kubernetes** - For scaled, orchestrated deployments
+
+## Docker Compose Deployment
+
+<Note>
+Docker Compose is the recommended deployment method as it handles both the application and MySQL database with proper networking and volume management.
+</Note>
+
+### Prerequisites
+
+- Docker Engine 20.10+
+- Docker Compose v2.0+
+- Network named `devefficiency` (external network)
+
+### Docker Compose Configuration
+
+The `docker-compose.yml` file defines a multi-container setup:
+
+```yaml docker-compose.yml
+version: '3.8'
+
+services:
+    mysqldb:
+        image: mysql:8.4.8
+        restart: unless-stopped
+        env_file: ./.env
+        environment:
+            - MYSQL_ROOT_PASSWORD=$DB_PASS
+            - MYSQL_DATABASE=$DB_NAME
+        volumes:
+            - db8:/var/lib/mysql
+        networks:
+            - devefficiency
+    app:
+        depends_on:
+            - mysqldb
+        build: ./
+        restart: unless-stopped
+        env_file: ./.env
+        ports:
+            - $PORT:$PORT
+        environment:
+            - DB_HOST=mysqldb
+            - DB_USER=root
+            - DB_PASS=$DB_PASS
+            - DB_NAME=$DB_NAME
+        stdin_open: true
+        tty: true
+        networks:
+            - devefficiency
+        volumes:
+            - tmp:/opt/app/tmp
+
+volumes:
+    db8:
+    tmp:
+
+networks:
+    devefficiency:
+        external: true
+```
+
+### Deployment Steps
+
+<Steps>
+  <Step title="Create external network">
+    The Docker Compose configuration requires an external network named `devefficiency`. Create it before deployment:
+    
+    ```bash
+    docker network create devefficiency
+    ```
+    
+    <Info>
+    This external network allows multiple Docker Compose projects to communicate and enables easier integration with reverse proxies like Nginx or Traefik.
+    </Info>
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create and configure your `.env` file with production settings:
+    
+    ```bash
+    cp .env.example .env
+    nano .env
+    ```
+    
+    Critical settings for Docker deployment:
+    
+    ```bash .env
+    NODE_ENV=production
+    PORT=3002
+    
+    # Strong secret for JWT
+    SECRET=your_production_secret_minimum_32_characters
+    
+    # Database configuration (matches docker-compose.yml)
+    DB_NAME=devefficiency
+    DB_USER=root
+    DB_PASS=strong_mysql_password
+    DB_HOST=mysqldb  # Service name from docker-compose.yml
+    
+    # Email configuration
+    EMAIL_FROM=noreply@yourdomain.com
+    EMAIL_NAME=DevEfficiency
+    EMAIL_USER=smtp@yourdomain.com
+    EMAIL_PASS=smtp_password
+    EMAIL_HOST=smtp.yourdomain.com
+    EMAIL_CC=admin@yourdomain.com
+    ```
+    
+    <Warning>
+    The `DB_HOST` must be set to `mysqldb` (the MySQL service name) when using Docker Compose. Do not use `localhost`.
+    </Warning>
+  </Step>
+
+  <Step title="Build and start services">
+    Build the Docker images and start all services:
+    
+    ```bash
+    docker-compose up -d --build
+    ```
+    
+    This command:
+    - Builds the application Docker image using the Dockerfile
+    - Pulls MySQL 8.4.8 image
+    - Creates and starts both containers
+    - Sets up networking between services
+    - Creates persistent volumes for database and temp files
+  </Step>
+
+  <Step title="Verify deployment">
+    Check that all services are running:
+    
+    ```bash
+    docker-compose ps
+    ```
+    
+    You should see both `mysqldb` and `app` services in the "Up" state.
+    
+    View application logs:
+    
+    ```bash
+    docker-compose logs -f app
+    ```
+    
+    Look for successful database connection and model synchronization messages.
+  </Step>
+
+  <Step title="Run database migrations">
+    The application automatically runs database synchronization on startup (from `index.ts:7`):
+    
+    ```typescript
+    await syncModels()
+    ```
+    
+    This creates all necessary tables and seeds initial configuration. The sync uses `ALTER` mode to preserve existing data while updating schema.
+    
+    <Info>
+    The sync process (defined in `src/sync.ts`) creates tables for Users, Clients, Projects, Protocols, Billing, and all other models. It also runs `seedConfigs()` to populate default configurations.
+    </Info>
+  </Step>
+
+  <Step title="Test the deployment">
+    Verify the application is accessible:
+    
+    ```bash
+    curl http://localhost:3002/api/
+    ```
+    
+    Or access it through your browser if you've configured a reverse proxy.
+  </Step>
+</Steps>
+
+### Docker Volumes
+
+The Docker Compose setup creates two persistent volumes:
+
+<ParamField path="db8" type="volume">
+  Stores MySQL database files at `/var/lib/mysql`. This ensures data persistence across container restarts.
+</ParamField>
+
+<ParamField path="tmp" type="volume">
+  Mounted at `/opt/app/tmp` for temporary files, PDF generation, and other ephemeral data.
+</ParamField>
+
+### Dockerfile Details
+
+The application Dockerfile includes several important configurations:
+
+```dockerfile Dockerfile
+FROM node:18-slim
+
+WORKDIR /opt/app
+
+# Skip Puppeteer's Chromium download (we install Chrome separately)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD true
+
+# Install Google Chrome for Puppeteer PDF generation
+RUN apt-get update && apt-get install gnupg wget -y && \
+    wget --quiet --output-document=- https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/google-archive.gpg && \
+    sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' && \
+    apt-get update && \
+    apt-get install google-chrome-stable -y --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY ./package.json .
+RUN npm install
+
+COPY . .
+
+RUN npm run build
+CMD npm start
+```
+
+<Tip>
+Google Chrome is installed for Puppeteer to enable PDF generation and web automation features. This adds approximately 300MB to the image size but is required for the application's reporting functionality.
+</Tip>
+
+## Manual Deployment
+
+For traditional server deployments without Docker:
+
+<Steps>
+  <Step title="Install dependencies">
+    Ensure your server has the required software:
+    
+    ```bash
+    # Install Node.js 18
+    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+    
+    # Install MySQL 8
+    sudo apt-get install -y mysql-server
+    
+    # Install build tools
+    sudo apt-get install -y build-essential
+    ```
+  </Step>
+
+  <Step title="Set up MySQL database">
+    Create the database and user:
+    
+    ```sql
+    CREATE DATABASE devefficiency;
+    CREATE USER 'deveff_user'@'localhost' IDENTIFIED BY 'strong_password';
+    GRANT ALL PRIVILEGES ON devefficiency.* TO 'deveff_user'@'localhost';
+    FLUSH PRIVILEGES;
+    ```
+  </Step>
+
+  <Step title="Clone and build application">
+    ```bash
+    cd /opt
+    git clone <repository-url> devefficiency
+    cd devefficiency
+    npm install
+    npm run build
+    ```
+    
+    The build script (from `package.json:8`) compiles TypeScript and copies static assets:
+    
+    ```json
+    "build": "tsc --build && cp -r ./src/public ./dist/src"
+    ```
+  </Step>
+
+  <Step title="Configure environment">
+    Create `.env` file:
+    
+    ```bash
+    cp .env.example .env
+    nano .env
+    ```
+    
+    Set `DB_HOST=localhost` for local MySQL installation.
+  </Step>
+
+  <Step title="Set up process manager">
+    Use PM2 to manage the application process:
+    
+    ```bash
+    npm install -g pm2
+    
+    # Start application
+    pm2 start npm --name "devefficiency" -- start
+    
+    # Configure auto-restart on server reboot
+    pm2 startup
+    pm2 save
+    ```
+    
+    <Info>
+    The start command (from `package.json:7`) runs the compiled application:
+    
+    ```json
+    "start": "node ./dist/index.js"
+    ```
+    </Info>
+  </Step>
+
+  <Step title="Configure reverse proxy">
+    Set up Nginx as a reverse proxy:
+    
+    ```nginx /etc/nginx/sites-available/devefficiency
+    server {
+        listen 80;
+        server_name yourdomain.com;
+        
+        location / {
+            proxy_pass http://localhost:3002;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+    
+    Enable the site:
+    
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/devefficiency /etc/nginx/sites-enabled/
+    sudo nginx -t
+    sudo systemctl reload nginx
+    ```
+  </Step>
+
+  <Step title="Set up SSL with Let's Encrypt">
+    ```bash
+    sudo apt-get install -y certbot python3-certbot-nginx
+    sudo certbot --nginx -d yourdomain.com
+    ```
+  </Step>
+</Steps>
+
+## Production Considerations
+
+### Port Configuration
+
+The application binds to all network interfaces (`0.0.0.0`) as configured in `index.ts`:
+
+```typescript index.ts:11
+await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT) || 3000 })
+```
+
+<Warning>
+When exposing the application directly to the internet, ensure you:
+1. Use a reverse proxy (Nginx, Caddy, Traefik)
+2. Enable SSL/TLS certificates
+3. Configure proper firewall rules
+4. Monitor rate limiting (configured at 100 requests/minute in `src/app.ts:34`)
+</Warning>
+
+### Security Hardening
+
+<Steps>
+  <Step title="Enable Helmet security headers">
+    The application uses `@fastify/helmet` for security headers (configured in `src/app.ts:23-26`):
+    
+    ```typescript
+    app.register(helmet, {
+        contentSecurityPolicy: false,
+        referrerPolicy: false,
+    })
+    ```
+    
+    Consider enabling CSP in production by removing `contentSecurityPolicy: false`.
+  </Step>
+
+  <Step title="Configure rate limiting">
+    Rate limiting is enabled at 100 requests per minute per IP:
+    
+    ```typescript src/app.ts:33-36
+    app.register(rateLimit, {
+        max: 100,
+        timeWindow: '1 minute',
+    })
+    ```
+    
+    Adjust these values based on your traffic patterns.
+  </Step>
+
+  <Step title="Database connection pooling">
+    The application uses connection pooling (from `src/db.ts`):
+    
+    ```typescript
+    pool: {
+        max: 5,
+        min: 0,
+        idle: 10000,
+    }
+    ```
+    
+    For high-traffic environments, consider increasing `max` to 10-20 connections.
+  </Step>
+
+  <Step title="Disable database logging">
+    In production, disable SQL query logging by modifying `src/db.ts:11`:
+    
+    ```typescript
+    logging: false  // Instead of console.log
+    ```
+  </Step>
+</Steps>
+
+### Monitoring and Logs
+
+<Tabs>
+  <Tab title="Docker Compose">
+    View logs for all services:
+    
+    ```bash
+    docker-compose logs -f
+    ```
+    
+    View application logs only:
+    
+    ```bash
+    docker-compose logs -f app
+    ```
+    
+    View MySQL logs:
+    
+    ```bash
+    docker-compose logs -f mysqldb
+    ```
+    
+    Configure log rotation in `docker-compose.yml`:
+    
+    ```yaml
+    app:
+      logging:
+        driver: "json-file"
+        options:
+          max-size: "10m"
+          max-file: "3"
+    ```
+  </Tab>
+
+  <Tab title="PM2">
+    View logs:
+    
+    ```bash
+    pm2 logs devefficiency
+    ```
+    
+    Monitor performance:
+    
+    ```bash
+    pm2 monit
+    ```
+    
+    View process status:
+    
+    ```bash
+    pm2 status
+    ```
+  </Tab>
+</Tabs>
+
+### Backup Strategy
+
+<Steps>
+  <Step title="Database backups">
+    For Docker deployments, back up the MySQL volume:
+    
+    ```bash
+    # Create backup
+    docker-compose exec mysqldb mysqldump -u root -p$DB_PASS $DB_NAME > backup.sql
+    
+    # Restore backup
+    docker-compose exec -T mysqldb mysql -u root -p$DB_PASS $DB_NAME < backup.sql
+    ```
+    
+    Set up automated daily backups:
+    
+    ```bash
+    # Add to crontab
+    0 2 * * * cd /path/to/app && docker-compose exec mysqldb mysqldump -u root -pPASSWORD DB_NAME > /backups/devefficiency-$(date +\%Y\%m\%d).sql
+    ```
+  </Step>
+
+  <Step title="Application data backups">
+    Back up the tmp volume for generated PDFs and files:
+    
+    ```bash
+    docker run --rm -v devefficiency_tmp:/data -v $(pwd):/backup ubuntu tar czf /backup/tmp-backup.tar.gz /data
+    ```
+  </Step>
+</Steps>
+
+### Scaling Considerations
+
+<Info>
+For production deployments requiring high availability:
+
+1. **Load Balancing**: Use multiple application instances behind a load balancer
+2. **Database Clustering**: Set up MySQL replication or use managed database services
+3. **Session Management**: Implement Redis for session storage if scaling horizontally
+4. **File Storage**: Use object storage (S3, MinIO) instead of local volumes for PDFs
+5. **Container Orchestration**: Consider Kubernetes for advanced scaling and management
+</Info>
+
+## Updating the Application
+
+<Tabs>
+  <Tab title="Docker Compose">
+    ```bash
+    # Pull latest code
+    git pull origin main
+    
+    # Rebuild and restart
+    docker-compose down
+    docker-compose up -d --build
+    
+    # View logs to confirm successful startup
+    docker-compose logs -f app
+    ```
+  </Tab>
+
+  <Tab title="PM2">
+    ```bash
+    # Pull latest code
+    git pull origin main
+    
+    # Install dependencies and rebuild
+    npm install
+    npm run build
+    
+    # Restart application
+    pm2 restart devefficiency
+    
+    # View logs
+    pm2 logs devefficiency
+    ```
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+### Application won't start
+
+1. Check database connectivity:
+   ```bash
+   docker-compose exec app ping mysqldb
+   ```
+
+2. Verify environment variables:
+   ```bash
+   docker-compose exec app env | grep -E '^(DB_|EMAIL_|SECRET)'
+   ```
+
+3. Check application logs for errors:
+   ```bash
+   docker-compose logs app | tail -50
+   ```
+
+### Database connection failed
+
+1. Ensure MySQL is running:
+   ```bash
+   docker-compose ps mysqldb
+   ```
+
+2. Verify database credentials match:
+   ```bash
+   docker-compose exec mysqldb mysql -u root -p -e "SHOW DATABASES;"
+   ```
+
+3. Check network connectivity:
+   ```bash
+   docker network inspect devefficiency
+   ```
+
+### Port conflicts
+
+If port 3002 is already in use:
+
+```bash
+# Find process using the port
+sudo lsof -i :3002
+
+# Change PORT in .env and restart
+docker-compose down
+docker-compose up -d
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="code" href="/api/auth/login">
+    Explore available API endpoints and authentication
+  </Card>
+  <Card title="Configuration" icon="gear" href="/getting-started/configuration">
+    Fine-tune your production configuration
+  </Card>
+</CardGroup>

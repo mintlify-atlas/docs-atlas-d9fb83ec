@@ -1,0 +1,652 @@
+---
+title: 'Payables'
+description: 'Manage accounts payable and expenses'
+---
+
+The Payables API allows you to manage accounts payable, track expenses, and process payments. Payables are linked to suppliers, bank accounts, and cost centers for comprehensive financial tracking.
+
+## The Payable Object
+
+Payables represent money owed to suppliers for goods or services received.
+
+### Attributes
+
+<ParamField path="id" type="number">
+  Unique identifier for the payable
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Description of the expense or invoice
+</ParamField>
+
+<ParamField path="value" type="number" required>
+  Amount owed (decimal with 2 decimal places)
+</ParamField>
+
+<ParamField path="dueDate" type="string" required>
+  Date when payment is due (ISO 8601 format)
+</ParamField>
+
+<ParamField path="paymentDate" type="string">
+  Date when payment was made (ISO 8601 format). Null if unpaid.
+</ParamField>
+
+<ParamField path="status" type="enum">
+  Current status of the payable. One of: `pendente`, `pago`, `atrasado`, `cancelado`
+  <Expandable title="Status Values">
+    - `pendente` - Payment is pending
+    - `pago` - Payment has been made
+    - `atrasado` - Payment is overdue
+    - `cancelado` - Payable has been cancelled
+  </Expandable>
+  Defaults to `pendente`
+</ParamField>
+
+<ParamField path="SupplierId" type="number">
+  Foreign key reference to the supplier
+</ParamField>
+
+<ParamField path="BankAccountId" type="number">
+  Foreign key reference to the bank account used for payment
+</ParamField>
+
+<ParamField path="CostCenterId" type="number">
+  Foreign key reference to the cost center for expense tracking
+</ParamField>
+
+<ParamField path="createdAt" type="string">
+  Timestamp when the payable was created (ISO 8601 format)
+</ParamField>
+
+<ParamField path="updatedAt" type="string">
+  Timestamp when the payable was last updated (ISO 8601 format)
+</ParamField>
+
+<ParamField path="Supplier" type="object">
+  Populated supplier object when included in query
+</ParamField>
+
+<ParamField path="BankAccount" type="object">
+  Populated bank account object when included in query
+</ParamField>
+
+<ParamField path="CostCenter" type="object">
+  Populated cost center object when included in query
+</ParamField>
+
+## List All Payables
+
+Retrieve all payables with their associated supplier, bank account, and cost center information. Results are ordered by due date in descending order.
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url https://api.devefficiency.com/api/payables \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/payables', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  }
+});
+const payables = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+  'https://api.devefficiency.com/api/payables',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  }
+)
+payables = response.json()
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="payables" type="array">
+  Array of payable objects with populated associations
+  <Expandable title="Payable Object">
+    <ResponseField name="id" type="number">
+      Unique identifier
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Expense description
+    </ResponseField>
+    <ResponseField name="value" type="number">
+      Amount owed
+    </ResponseField>
+    <ResponseField name="dueDate" type="string">
+      Payment due date
+    </ResponseField>
+    <ResponseField name="paymentDate" type="string">
+      Actual payment date
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current status
+    </ResponseField>
+    <ResponseField name="SupplierId" type="number">
+      Supplier ID
+    </ResponseField>
+    <ResponseField name="BankAccountId" type="number">
+      Bank account ID
+    </ResponseField>
+    <ResponseField name="CostCenterId" type="number">
+      Cost center ID
+    </ResponseField>
+    <ResponseField name="Supplier" type="object">
+      Supplier details
+    </ResponseField>
+    <ResponseField name="BankAccount" type="object">
+      Bank account details
+    </ResponseField>
+    <ResponseField name="CostCenter" type="object">
+      Cost center details
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      Creation timestamp
+    </ResponseField>
+    <ResponseField name="updatedAt" type="string">
+      Last update timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+[
+  {
+    "id": 1,
+    "description": "Office supplies - March 2024",
+    "value": 1250.50,
+    "dueDate": "2024-03-31T00:00:00.000Z",
+    "paymentDate": "2024-03-28T10:15:00.000Z",
+    "status": "pago",
+    "SupplierId": 5,
+    "BankAccountId": 1,
+    "CostCenterId": 3,
+    "Supplier": {
+      "id": 5,
+      "name": "Office Depot",
+      "email": "invoices@officedepot.com"
+    },
+    "BankAccount": {
+      "id": 1,
+      "name": "Main Operating Account",
+      "balance": 50000.00
+    },
+    "CostCenter": {
+      "id": 3,
+      "name": "Administrative",
+      "description": "General administrative expenses"
+    },
+    "createdAt": "2024-03-01T09:00:00.000Z",
+    "updatedAt": "2024-03-28T10:15:00.000Z"
+  },
+  {
+    "id": 2,
+    "description": "Cloud hosting - AWS",
+    "value": 3500.00,
+    "dueDate": "2024-03-15T00:00:00.000Z",
+    "paymentDate": null,
+    "status": "pendente",
+    "SupplierId": 12,
+    "BankAccountId": 1,
+    "CostCenterId": 7,
+    "Supplier": {
+      "id": 12,
+      "name": "Amazon Web Services",
+      "email": "billing@aws.amazon.com"
+    },
+    "BankAccount": {
+      "id": 1,
+      "name": "Main Operating Account",
+      "balance": 50000.00
+    },
+    "CostCenter": {
+      "id": 7,
+      "name": "Technology",
+      "description": "IT infrastructure and services"
+    },
+    "createdAt": "2024-03-01T08:30:00.000Z",
+    "updatedAt": "2024-03-01T08:30:00.000Z"
+  }
+]
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+## Get a Payable
+
+Retrieve details of a specific payable by ID, including associated supplier, bank account, and cost center information.
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url https://api.devefficiency.com/api/payables/1 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/payables/1', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  }
+});
+const payable = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.get(
+  'https://api.devefficiency.com/api/payables/1',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  }
+)
+payable = response.json()
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the payable
+</ParamField>
+
+### Response
+
+<ResponseField name="payable" type="object">
+  The requested payable object with populated associations
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "id": 1,
+  "description": "Office supplies - March 2024",
+  "value": 1250.50,
+  "dueDate": "2024-03-31T00:00:00.000Z",
+  "paymentDate": "2024-03-28T10:15:00.000Z",
+  "status": "pago",
+  "SupplierId": 5,
+  "BankAccountId": 1,
+  "CostCenterId": 3,
+  "Supplier": {
+    "id": 5,
+    "name": "Office Depot",
+    "email": "invoices@officedepot.com"
+  },
+  "BankAccount": {
+    "id": 1,
+    "name": "Main Operating Account",
+    "balance": 50000.00
+  },
+  "CostCenter": {
+    "id": 3,
+    "name": "Administrative",
+    "description": "General administrative expenses"
+  },
+  "createdAt": "2024-03-01T09:00:00.000Z",
+  "updatedAt": "2024-03-28T10:15:00.000Z"
+}
+```
+
+```json 404 - Not Found
+{
+  "error": "Payable not found"
+}
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+## Create a Payable
+
+Create a new payable record. This operation is wrapped in a database transaction to ensure data consistency.
+
+<CodeGroup>
+```bash cURL
+curl --request POST \
+  --url https://api.devefficiency.com/api/payables \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "description": "Software licenses - Q2 2024",
+    "value": 5000.00,
+    "dueDate": "2024-04-30",
+    "status": "pendente",
+    "SupplierId": 8,
+    "BankAccountId": 1,
+    "CostCenterId": 7
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/payables', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    description: 'Software licenses - Q2 2024',
+    value: 5000.00,
+    dueDate: '2024-04-30',
+    status: 'pendente',
+    SupplierId: 8,
+    BankAccountId: 1,
+    CostCenterId: 7
+  })
+});
+const newPayable = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.post(
+  'https://api.devefficiency.com/api/payables',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  json={
+    'description': 'Software licenses - Q2 2024',
+    'value': 5000.00,
+    'dueDate': '2024-04-30',
+    'status': 'pendente',
+    'SupplierId': 8,
+    'BankAccountId': 1,
+    'CostCenterId': 7
+  }
+)
+new_payable = response.json()
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="description" type="string" required>
+  Description of the expense or invoice
+</ParamField>
+
+<ParamField body="value" type="number" required>
+  Amount owed (must be a positive number with up to 2 decimal places)
+</ParamField>
+
+<ParamField body="dueDate" type="string" required>
+  Date when payment is due (ISO 8601 format or YYYY-MM-DD)
+</ParamField>
+
+<ParamField body="paymentDate" type="string">
+  Date when payment was made (ISO 8601 format or YYYY-MM-DD). Leave null for unpaid items.
+</ParamField>
+
+<ParamField body="status" type="enum">
+  Current status. One of: `pendente`, `pago`, `atrasado`, `cancelado`. Defaults to `pendente`.
+</ParamField>
+
+<ParamField body="SupplierId" type="number">
+  ID of the supplier associated with this payable
+</ParamField>
+
+<ParamField body="BankAccountId" type="number">
+  ID of the bank account to use for payment
+</ParamField>
+
+<ParamField body="CostCenterId" type="number">
+  ID of the cost center for expense categorization
+</ParamField>
+
+### Response
+
+<ResponseField name="payable" type="object">
+  The newly created payable object
+</ResponseField>
+
+<ResponseExample>
+```json 201 - Created
+{
+  "id": 3,
+  "description": "Software licenses - Q2 2024",
+  "value": 5000.00,
+  "dueDate": "2024-04-30T00:00:00.000Z",
+  "paymentDate": null,
+  "status": "pendente",
+  "SupplierId": 8,
+  "BankAccountId": 1,
+  "CostCenterId": 7,
+  "createdAt": "2024-03-08T15:45:00.000Z",
+  "updatedAt": "2024-03-08T15:45:00.000Z"
+}
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+<Info>
+  Payables have hooks that trigger on create, update, and delete events. These hooks can be used for automated notifications, balance updates, or integration with accounting systems.
+</Info>
+
+## Update a Payable
+
+Update an existing payable. This operation is wrapped in a database transaction to ensure data consistency. Common use cases include marking a payable as paid or updating payment details.
+
+<CodeGroup>
+```bash cURL
+curl --request PUT \
+  --url https://api.devefficiency.com/api/payables/3 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "status": "pago",
+    "paymentDate": "2024-03-08T16:00:00.000Z"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/payables/3', {
+  method: 'PUT',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    status: 'pago',
+    paymentDate: '2024-03-08T16:00:00.000Z'
+  })
+});
+const updatedPayable = await response.json();
+```
+
+```python Python
+import requests
+
+response = requests.put(
+  'https://api.devefficiency.com/api/payables/3',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  json={
+    'status': 'pago',
+    'paymentDate': '2024-03-08T16:00:00.000Z'
+  }
+)
+updated_payable = response.json()
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the payable to update
+</ParamField>
+
+### Request Body
+
+Include only the fields you want to update. All fields are optional.
+
+<ParamField body="description" type="string">
+  Description of the expense or invoice
+</ParamField>
+
+<ParamField body="value" type="number">
+  Amount owed
+</ParamField>
+
+<ParamField body="dueDate" type="string">
+  Date when payment is due
+</ParamField>
+
+<ParamField body="paymentDate" type="string">
+  Date when payment was made
+</ParamField>
+
+<ParamField body="status" type="enum">
+  Current status. One of: `pendente`, `pago`, `atrasado`, `cancelado`
+</ParamField>
+
+<ParamField body="SupplierId" type="number">
+  ID of the supplier
+</ParamField>
+
+<ParamField body="BankAccountId" type="number">
+  ID of the bank account
+</ParamField>
+
+<ParamField body="CostCenterId" type="number">
+  ID of the cost center
+</ParamField>
+
+### Response
+
+<ResponseField name="payable" type="object">
+  The updated payable object
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "id": 3,
+  "description": "Software licenses - Q2 2024",
+  "value": 5000.00,
+  "dueDate": "2024-04-30T00:00:00.000Z",
+  "paymentDate": "2024-03-08T16:00:00.000Z",
+  "status": "pago",
+  "SupplierId": 8,
+  "BankAccountId": 1,
+  "CostCenterId": 7,
+  "createdAt": "2024-03-08T15:45:00.000Z",
+  "updatedAt": "2024-03-08T16:05:00.000Z"
+}
+```
+
+```json 404 - Not Found
+{
+  "error": "Payable not found"
+}
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+## Delete a Payable
+
+Permanently delete a payable from the system. This operation is wrapped in a database transaction.
+
+<Warning>
+  This action is irreversible. Consider marking the payable as `cancelado` instead if you need to maintain audit records.
+</Warning>
+
+<CodeGroup>
+```bash cURL
+curl --request DELETE \
+  --url https://api.devefficiency.com/api/payables/3 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.devefficiency.com/api/payables/3', {
+  method: 'DELETE',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+```
+
+```python Python
+import requests
+
+response = requests.delete(
+  'https://api.devefficiency.com/api/payables/3',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+)
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the payable to delete
+</ParamField>
+
+### Response
+
+<ResponseExample>
+```json 204 - No Content
+// Empty response body on success
+```
+
+```json 404 - Not Found
+{
+  "error": "Payable not found"
+}
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+## Related Resources
+
+- [Cost Centers](/api/financial/cost-centers) - Categorize payables by cost center
+- [Bank Accounts](/api/financial/bank-accounts) - Manage payment accounts
+- [Financial Reports](/api/financial/reports) - View expense reports and DRE analysis

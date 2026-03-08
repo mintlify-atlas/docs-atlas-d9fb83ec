@@ -1,0 +1,404 @@
+---
+title: 'JWT Token Implementation'
+description: 'Deep dive into JWT token generation, validation, and lifecycle management'
+---
+
+## Overview
+
+DevEfficiency uses JSON Web Tokens (JWT) for stateless authentication. Tokens are signed with a secret key, include user information, and have a configurable expiration time. The implementation leverages the `jsonwebtoken` library for secure token operations.
+
+## Token Structure
+
+JWT tokens consist of three parts:
+
+1. **Header**: Algorithm and token type
+2. **Payload**: User data and claims
+3. **Signature**: Cryptographic signature for verification
+
+<Info>
+  Tokens are Base64-encoded and use the HS256 (HMAC-SHA256) algorithm by default for signing.
+</Info>
+
+## Token Generation
+
+Tokens are generated during the authentication process in the `authController`:
+
+<CodeGroup>
+```typescript src/controllers/authController.ts
+import jsonwebtoken from 'jsonwebtoken'
+import { FastifyRequest, FastifyReply } from 'fastify'
+import bcrypt from 'bcrypt'
+import User from '../models/User'
+
+type authRequest = FastifyRequest<{
+    Body: {
+        username: string
+        password: string
+        refresh_token: string
+    }
+    Headers: any
+}>
+
+class authController {
+    static async auth(req: authRequest, res: FastifyReply): Promise<FastifyReply> {
+        const { username, password } = req.body
+        
+        const user = await User.findOne({ where: { username } })
+        
+        if (!user) return res.status(401).send({ error: true, message: 'Usuário ou senha invalidos.' })
+        if (!bcrypt.compareSync(password, user.password))
+            return res.status(401).send({ error: true, message: 'Usuário ou senha invalidos.' })
+        
+        const date = new Date()
+        
+        const token = await jsonwebtoken.sign({ user }, String(process.env.SECRET), { expiresIn: '1h' })
+        
+        date.setHours(date.getHours() + 1)
+        
+        return res.send({
+            type: 'bearer',
+            token,
+            expires_in: date.valueOf(),
+        })
+    }
+}
+```
+</CodeGroup>
+
+### Generation Process Breakdown
+
+<Steps>
+  <Step title="Extract Credentials">
+    The controller extracts `username` and `password` from the request body.
+  </Step>
+  
+  <Step title="User Lookup">
+    The system queries the database for a user with the provided username using Sequelize's `findOne` method.
+  </Step>
+  
+  <Step title="Validate Password">
+    bcrypt compares the plain-text password with the stored hash using `compareSync`.
+  </Step>
+  
+  <Step title="Sign Token">
+    A JWT is created using `jsonwebtoken.sign()` with the user object as payload, signed with the SECRET environment variable, and set to expire in 1 hour.
+  </Step>
+  
+  <Step title="Return Response">
+    The response includes the token type (bearer), the JWT token string, and the expiration timestamp in milliseconds.
+  </Step>
+</Steps>
+
+## Token Payload
+
+The JWT payload contains the complete user object:
+
+```json
+{
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "password": "$2b$10$...",
+    "createdAt": "2026-01-15T10:30:00.000Z",
+    "updatedAt": "2026-01-15T10:30:00.000Z"
+  },
+  "iat": 1709895600,
+  "exp": 1709899200
+}
+```
+
+<Warning>
+  The user object includes the hashed password. While this is cryptographically secure, best practice would be to exclude sensitive fields from the JWT payload to reduce token size and minimize information exposure.
+</Warning>
+
+## Token Expiration
+
+Tokens have a fixed lifespan of **1 hour** from creation:
+
+<CodeGroup>
+```typescript Token Expiration Configuration
+const token = await jsonwebtoken.sign(
+    { user }, 
+    String(process.env.SECRET), 
+    { expiresIn: '1h' }  // 1 hour expiration
+)
+
+const date = new Date()
+date.setHours(date.getHours() + 1)  // Calculate expiration timestamp
+```
+</CodeGroup>
+
+The response includes `expires_in` as a Unix timestamp in milliseconds, allowing clients to:
+
+- Display remaining time
+- Proactively refresh tokens before expiration
+- Handle token expiration gracefully
+
+<Tip>
+  Clients should implement token refresh logic that requests a new token before the current one expires, ensuring uninterrupted access.
+</Tip>
+
+## Token Verification
+
+Token validation occurs in the `isAuthed` middleware, which protects routes requiring authentication:
+
+<CodeGroup>
+```typescript src/middlewares/isAuthed.ts
+import jsonwebtoken from 'jsonwebtoken'
+import {
+    FastifyReply,
+    FastifyRequest,
+    HookHandlerDoneFunction,
+    RequestBodyDefault,
+    RequestHeadersDefault,
+} from 'fastify'
+import User from '../models/User'
+
+type isAuthedRequest = FastifyRequest<{
+    Body: RequestBodyDefault
+    Headers: RequestHeadersDefault
+}>
+
+export default function isAuthed(
+    req: isAuthedRequest, 
+    res: FastifyReply, 
+    next: HookHandlerDoneFunction
+): void {
+    const { authorization } = req.headers
+    
+    const decoded = jsonwebtoken.verify(
+        authorization?.replace('bearer ', '').replace('Bearer ', '') as string,
+        process.env.SECRET as string,
+    ) as User
+    
+    req.__user = decoded
+    
+    next()
+}
+```
+</CodeGroup>
+
+### Verification Process
+
+<Steps>
+  <Step title="Extract Token">
+    The middleware reads the `Authorization` header from the request.
+  </Step>
+  
+  <Step title="Clean Token String">
+    Both `bearer` and `Bearer` prefixes are removed using string replacement, ensuring case-insensitive handling.
+  </Step>
+  
+  <Step title="Verify Signature">
+    `jsonwebtoken.verify()` validates the token signature against the SECRET and checks expiration.
+  </Step>
+  
+  <Step title="Decode Payload">
+    The user object is extracted from the verified token and cast to the User type.
+  </Step>
+  
+  <Step title="Attach to Request">
+    The decoded user is stored in `req.__user`, making it available to route handlers.
+  </Step>
+  
+  <Step title="Continue Chain">
+    `next()` is called to proceed to the next middleware or route handler.
+  </Step>
+</Steps>
+
+## Token Verification Errors
+
+The `jsonwebtoken.verify()` method throws errors for various failure scenarios:
+
+| Error | Cause | HTTP Status |
+|-------|-------|-------------|
+| `JsonWebTokenError` | Invalid token format or signature | 401 |
+| `TokenExpiredError` | Token has passed expiration time | 401 |
+| `NotBeforeError` | Token used before valid | 401 |
+
+<Note>
+  Fastify's error handling will catch these exceptions and return appropriate error responses. Consider implementing custom error handlers for more user-friendly messages.
+</Note>
+
+## Token Refresh
+
+The API provides a token refresh endpoint:
+
+<CodeGroup>
+```typescript src/routes.ts
+instance.post('/auth/refresh', authController.auth)
+```
+</CodeGroup>
+
+Currently, the refresh endpoint uses the same authentication logic as the initial login, requiring username and password:
+
+<CodeGroup>
+```bash Refresh Token Request
+curl -X POST https://api.devefficiency.com/api/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "password": "securepassword"
+  }'
+```
+
+```json Response
+{
+  "type": "bearer",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_in": 1709902800000
+}
+```
+</CodeGroup>
+
+<Warning>
+  The current refresh implementation requires re-authentication with credentials. A more secure pattern would use refresh tokens that allow obtaining new access tokens without re-submitting passwords.
+</Warning>
+
+## Using Tokens in Requests
+
+Clients must include the JWT token in the `Authorization` header for protected endpoints:
+
+<CodeGroup>
+```javascript JavaScript/Fetch
+const response = await fetch('https://api.devefficiency.com/api/clients', {
+    headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+    }
+})
+```
+
+```python Python/Requests
+import requests
+
+headers = {
+    'Authorization': f'Bearer {token}',
+    'Content-Type': 'application/json'
+}
+
+response = requests.get('https://api.devefficiency.com/api/clients', headers=headers)
+```
+
+```bash cURL
+curl -X GET https://api.devefficiency.com/api/clients \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json"
+```
+</CodeGroup>
+
+## Verify Endpoint
+
+The `/api/auth/verify` endpoint allows clients to validate token status:
+
+<CodeGroup>
+```typescript src/controllers/authController.ts
+static verify(req: authRequest, res: FastifyReply): FastifyReply {
+    return res.send({ success: true })
+}
+```
+</CodeGroup>
+
+<CodeGroup>
+```bash Verify Token
+curl -X GET https://api.devefficiency.com/api/auth/verify \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+```json Success Response
+{
+  "success": true
+}
+```
+</CodeGroup>
+
+<Info>
+  The verify endpoint is protected by the `isAuthed` middleware. If the token is invalid or expired, the middleware will throw an error before the handler executes, returning a 401 status.
+</Info>
+
+## Security Best Practices
+
+<Warning>
+  **Critical Security Considerations**:
+  
+  1. **Secret Key Strength**: Use a cryptographically secure random string (minimum 32 characters) for the SECRET environment variable
+  2. **HTTPS Only**: Always transmit tokens over HTTPS in production to prevent interception
+  3. **Token Storage**: Store tokens securely on the client (httpOnly cookies or secure storage APIs)
+  4. **Payload Size**: Minimize JWT payload to reduce bandwidth and exposure
+  5. **Token Rotation**: Implement proper refresh token flow instead of storing long-lived credentials
+</Warning>
+
+## Implementation Examples
+
+### Client-Side Token Management
+
+<CodeGroup>
+```javascript Token Manager Class
+class AuthManager {
+    constructor() {
+        this.token = null
+        this.expiresIn = null
+    }
+    
+    async login(username, password) {
+        const response = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        })
+        
+        const data = await response.json()
+        
+        if (response.ok) {
+            this.token = data.token
+            this.expiresIn = data.expires_in
+            
+            // Store in localStorage or sessionStorage
+            localStorage.setItem('auth_token', data.token)
+            localStorage.setItem('token_expiry', data.expires_in)
+            
+            // Set up auto-refresh
+            this.scheduleRefresh()
+        }
+        
+        return data
+    }
+    
+    scheduleRefresh() {
+        const now = Date.now()
+        const expiresIn = this.expiresIn - now
+        
+        // Refresh 5 minutes before expiration
+        const refreshIn = expiresIn - (5 * 60 * 1000)
+        
+        if (refreshIn > 0) {
+            setTimeout(() => this.refresh(), refreshIn)
+        }
+    }
+    
+    async refresh() {
+        // Implement refresh logic
+    }
+    
+    isTokenValid() {
+        return this.token && Date.now() < this.expiresIn
+    }
+    
+    getAuthHeader() {
+        return { 'Authorization': `Bearer ${this.token}` }
+    }
+}
+```
+</CodeGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="User Management" icon="users" href="/auth/user-management">
+    Learn about credential management and password security
+  </Card>
+  
+  <Card title="Authentication Overview" icon="shield" href="/auth/overview">
+    Return to the authentication overview
+  </Card>
+</CardGroup>

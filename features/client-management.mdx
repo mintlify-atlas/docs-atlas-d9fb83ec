@@ -1,0 +1,510 @@
+---
+title: Client Management
+description: Manage clients, contacts, and addresses
+---
+
+## Overview
+
+Client management is the foundation of DevEfficiency. Clients are the central entity that connects to projects, service orders, subscriptions, and billing. Each client can have multiple contacts and addresses for comprehensive relationship management.
+
+<CardGroup cols={2}>
+  <Card title="Client Records" icon="building" href="#client-structure">
+    Core client information and configuration
+  </Card>
+  <Card title="Contacts" icon="address-book" href="#contacts">
+    Manage multiple contacts per client
+  </Card>
+  <Card title="Addresses" icon="location-dot" href="#addresses">
+    Delivery and billing addresses
+  </Card>
+  <Card title="Relationships" icon="diagram-project" href="#client-relationships">
+    Projects, orders, and billing
+  </Card>
+</CardGroup>
+
+## Client Structure
+
+Each client record contains core business information:
+
+```typescript
+interface Client {
+  id: number
+  name: string                  // Client display name (required, max 128 chars)
+  corporate_name?: string       // Legal business name (max 255 chars)
+  document?: string             // CPF/CNPJ (tax ID)
+  email?: string                // Primary email (max 128 chars)
+  due_day: number              // Default payment due day (default: 20)
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Field Details
+
+<Accordion title="name (Required)">
+**Display Name**: The primary identifier for the client.
+
+```typescript
+// From src/models/Client.ts:91-94
+name: {
+  type: DataTypes.STRING(128),
+  allowNull: false,
+}
+```
+
+**Usage:**
+- Displayed in client lists
+- Used in dropdowns and selection
+- Appears in reports and invoices
+</Accordion>
+
+<Accordion title="corporate_name">
+**Legal Name**: Official registered business name.
+
+```typescript
+// From src/models/Client.ts:95-97
+corporate_name: {
+  type: DataTypes.STRING(255),
+}
+```
+
+**Usage:**
+- Legal documents
+- Tax reporting
+- Formal invoices
+</Accordion>
+
+<Accordion title="document">
+**Tax ID**: CPF (individual) or CNPJ (business) in Brazil.
+
+```typescript
+// From src/models/Client.ts:98-100
+document: {
+  type: DataTypes.STRING(15),
+}
+```
+
+**Processing:**
+From `src/controllers/clientController.ts:38,47`, special characters are automatically removed:
+```typescript
+if (document) document = document.replace(/[^a-zA-Z0-9 ]/g, '')
+```
+
+**Format:**
+- CPF: 11 digits (individuals)
+- CNPJ: 14 digits (businesses)
+</Accordion>
+
+<Accordion title="due_day">
+**Default Payment Day**: Day of month when client payments are due.
+
+```typescript
+// From src/models/Client.ts:104-107
+due_day: {
+  type: DataTypes.INTEGER,
+  allowNull: false,
+  defaultValue: 20,
+}
+```
+
+**Default Configuration:**
+From `src/controllers/clientController.ts:34-36`, defaults can be set globally:
+```typescript
+let default_day_due = await Config.findOne({ 
+  where: { type: 'default_day_due' } 
+})
+due_day = due_day || parseInt(default_day_due?.value || '20')
+```
+</Accordion>
+
+## Creating Clients
+
+Create new client records:
+
+```typescript
+// From src/controllers/clientController.ts:31-40
+POST /clients
+
+{
+  "name": "Acme Corporation",
+  "corporate_name": "Acme Corp LTDA",
+  "document": "12.345.678/0001-90",
+  "email": "contact@acme.com",
+  "due_day": 15
+}
+```
+
+**Automatic Processing:**
+1. Document is sanitized (special characters removed)
+2. `due_day` defaults to global config or 20
+3. Client is created and returned
+
+<Info>
+**Minimal Requirements**: Only `name` is required. All other fields are optional and can be added later.
+</Info>
+
+## Updating Clients
+
+Update client information:
+
+```typescript
+// From src/controllers/clientController.ts:43-55
+PUT /clients/:id
+
+{
+  "name": "Acme Corporation Ltd",
+  "email": "billing@acme.com",
+  "due_day": 10
+}
+```
+
+**Safe Updates:**
+- Document is sanitized on update
+- Existing relationships are preserved
+- Can update individual fields
+
+## Viewing Clients
+
+### List All Clients
+
+```typescript
+// From src/controllers/clientController.ts:19-21
+GET /clients
+
+// Returns array of all clients
+[
+  {
+    "id": 1,
+    "name": "Acme Corporation",
+    "email": "contact@acme.com",
+    "due_day": 15
+  },
+  ...
+]
+```
+
+### View Client Details
+
+```typescript
+// From src/controllers/clientController.ts:23-28
+GET /clients/:id
+
+// Returns client with all related data
+{
+  "id": 1,
+  "name": "Acme Corporation",
+  "corporate_name": "Acme Corp LTDA",
+  "document": "12345678000190",
+  "email": "contact@acme.com",
+  "due_day": 15,
+  "credentials": [...],      // Server credentials
+  "projects": [...],         // Active projects
+  "servers": [...],          // Server information
+  "contacts": [...],         // Contact persons
+  "addresses": [...]         // Delivery/billing addresses
+}
+```
+
+<Note>
+**Complete Context**: The detail view includes all related entities, providing complete context for client management.
+</Note>
+
+## Contacts
+
+Manage contact persons for each client:
+
+### Contact Structure
+
+```typescript
+interface Contact {
+  id: number
+  name: string                  // Contact name (required, max 128 chars)
+  email?: string               // Contact email
+  number?: string              // Phone number
+  whatsapp?: string            // WhatsApp number
+  ClientId: number             // Parent client
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Managing Contacts
+
+<Tabs>
+  <Tab title="Create Contact">
+  ```typescript
+  POST /contacts
+  
+  {
+    "ClientId": 1,
+    "name": "John Doe",
+    "email": "john@acme.com",
+    "number": "+55 11 98765-4321",
+    "whatsapp": "+55 11 98765-4321"
+  }
+  ```
+  
+  Create new contact for a client.
+  </Tab>
+  
+  <Tab title="Multiple Contacts">
+  ```typescript
+  // Client can have multiple contacts
+  {
+    "id": 1,
+    "name": "Acme Corporation",
+    "contacts": [
+      {
+        "name": "John Doe",
+        "email": "john@acme.com",
+        "number": "+55 11 98765-4321"
+      },
+      {
+        "name": "Jane Smith",
+        "email": "jane@acme.com",
+        "number": "+55 11 98765-4322"
+      }
+    ]
+  }
+  ```
+  
+  Manage different roles (billing, technical, management).
+  </Tab>
+</Tabs>
+
+**Relationship:**
+```typescript
+// From src/models/Client.ts:134-136
+Client.hasMany(Contact, {
+  onDelete: 'RESTRICT',
+})
+Contact.belongsTo(Client)
+```
+
+<Warning>
+**Delete Protection**: Cannot delete a client if contacts exist. Remove contacts first or change deletion approach.
+</Warning>
+
+## Addresses
+
+Manage delivery and billing addresses:
+
+### Address Structure
+
+```typescript
+interface Address {
+  id: number
+  type: 'Entrega' | 'Cobrança'    // Delivery or Billing
+  street_name: string              // Street name (required)
+  number?: number                  // Street number
+  complement?: string              // Apt, suite, etc (max 20 chars)
+  neighborhood?: string            // Neighborhood/district
+  city: string                     // City (required)
+  state: BrazilianState           // Two-letter state code (required)
+  ibge: string                     // IBGE city code (7 digits, required)
+  zip: string                      // ZIP code (8 digits, required)
+  ClientId: number                 // Parent client
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Address Types
+
+<Tabs>
+  <Tab title="Entrega (Delivery)">
+  ```typescript
+  {
+    "type": "Entrega",
+    "street_name": "Rua das Flores",
+    "number": 123,
+    "complement": "Sala 456",
+    "neighborhood": "Centro",
+    "city": "São Paulo",
+    "state": "SP",
+    "zip": "01234567",
+    "ibge": "3550308"
+  }
+  ```
+  
+  Address for physical deliveries, on-site work, or equipment installation.
+  </Tab>
+  
+  <Tab title="Cobrança (Billing)">
+  ```typescript
+  {
+    "type": "Cobrança",
+    "street_name": "Av. Paulista",
+    "number": 1000,
+    "city": "São Paulo",
+    "state": "SP",
+    "zip": "01310100",
+    "ibge": "3550308"
+  }
+  ```
+  
+  Address for invoices, legal documents, and billing correspondence.
+  </Tab>
+</Tabs>
+
+### Brazilian States
+
+From `src/models/Address.ts:98-127`, all 27 Brazilian states are supported:
+
+```typescript
+state: {
+  type: DataTypes.ENUM(
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
+    'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
+    'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+  ),
+  allowNull: false,
+}
+```
+
+**IBGE Code**: From `src/models/Address.ts:130-133`, required 7-digit code for municipality identification.
+
+<Info>
+**Multiple Addresses**: Clients can have multiple addresses of each type for different locations or billing entities.
+</Info>
+
+## Client Relationships
+
+Clients are connected to many other entities:
+
+### Related Entities
+
+```typescript
+// From src/models/Client.ts:118-157
+Client.hasMany(Credential)        // Server access credentials
+Client.hasMany(Server)            // Server information
+Client.hasMany(Project)           // Active projects
+Client.hasMany(Service_order)     // Service requests
+Client.hasMany(Contact)           // Contact persons
+Client.hasMany(Subscription)      // Recurring services
+Client.hasMany(Billing)           // Invoices and payments
+Client.hasMany(Address)           // Addresses
+```
+
+### Accessing Related Data
+
+<Tabs>
+  <Tab title="Projects">
+  ```typescript
+  // Get client with projects
+  const client = await Client.findByPk(1, {
+    include: [Project]
+  })
+  
+  // Access projects
+  client.projects.forEach(project => {
+    console.log(project.name)
+  })
+  ```
+  </Tab>
+  
+  <Tab title="Service Orders">
+  ```typescript
+  // Get client service orders
+  const serviceOrders = await client.getService_orders({
+    include: [Protocol],
+    order: [['createdAt', 'DESC']]
+  })
+  ```
+  </Tab>
+  
+  <Tab title="Billing">
+  ```typescript
+  // Get client billing history
+  const billings = await client.getBillings({
+    where: { status: 'pago' },
+    order: [['payment_date', 'DESC']]
+  })
+  ```
+  </Tab>
+</Tabs>
+
+<Note>
+**Delete Protection**: All relationships use `onDelete: 'RESTRICT'`, preventing accidental client deletion when related records exist.
+</Note>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Complete Information" icon="clipboard-check">
+    Fill in corporate_name and document for business clients to enable proper invoicing
+  </Card>
+  <Card title="Multiple Contacts" icon="users">
+    Add technical, billing, and management contacts for complete communication
+  </Card>
+  <Card title="Accurate Addresses" icon="map-location-dot">
+    Maintain separate delivery and billing addresses with complete information
+  </Card>
+  <Card title="Due Day Configuration" icon="calendar-day">
+    Set due_day according to client payment terms for accurate billing
+  </Card>
+</CardGroup>
+
+## Common Workflows
+
+### Onboarding New Client
+
+1. **Create Client Record**
+   ```typescript
+   POST /clients
+   { "name": "New Client", "email": "client@example.com" }
+   ```
+
+2. **Add Business Details**
+   ```typescript
+   PUT /clients/:id
+   { "corporate_name": "...", "document": "..." }
+   ```
+
+3. **Add Contacts**
+   ```typescript
+   POST /contacts
+   { "ClientId": 1, "name": "...", "email": "..." }
+   ```
+
+4. **Add Addresses**
+   ```typescript
+   POST /addresses
+   { "ClientId": 1, "type": "Cobrança", ... }
+   ```
+
+5. **Create First Project**
+   ```typescript
+   POST /projects
+   { "ClientId": 1, "name": "Website" }
+   ```
+
+### Managing Client Information
+
+1. **View Complete Profile**
+   ```typescript
+   GET /clients/:id
+   ```
+
+2. **Update Core Information**
+   ```typescript
+   PUT /clients/:id
+   ```
+
+3. **Manage Contacts**
+   - Add new contacts as team changes
+   - Update contact information
+   - Remove outdated contacts
+
+4. **Update Addresses**
+   - Add new locations
+   - Update existing addresses
+   - Mark primary addresses
+
+### Client History Review
+
+1. **Get Client Details** with all relationships
+2. **Review Projects** - Active and completed work
+3. **Check Service Orders** - Current requests and status
+4. **Review Billing** - Payment history and outstanding invoices
+5. **Verify Contacts** - Current communication channels

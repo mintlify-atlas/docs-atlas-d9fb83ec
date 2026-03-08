@@ -1,0 +1,184 @@
+---
+title: "Create Service Order"
+api: "POST /api/os"
+description: "Create a new service order and automatically generate an associated protocol"
+---
+
+## Authentication
+
+This endpoint requires a valid JWT token in the Authorization header.
+
+```bash
+Authorization: Bearer <your_jwt_token>
+```
+
+## Request Body
+
+<ParamField body="subject" type="string" required>
+  The subject or title of the service order. Maximum length is 128 characters. This should be a concise summary of what the service order is about.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Detailed description of the service order requirements, scope of work, or additional context. This field supports longer text content.
+</ParamField>
+
+<ParamField body="ProjectId" type="number">
+  ID of the project this service order is associated with. If provided, the service order will be linked to the project, and the ClientId will be automatically derived from the project unless explicitly provided.
+</ParamField>
+
+<ParamField body="ClientId" type="number">
+  ID of the client requesting the service order. If a ProjectId is provided, the ClientId from that project will take precedence. If neither ProjectId nor ClientId is provided, the ClientId will be set to null.
+</ParamField>
+
+## Response
+
+Returns the newly created service order object.
+
+<ResponseField name="id" type="number">
+  Unique identifier for the newly created service order.
+</ResponseField>
+
+<ResponseField name="subject" type="string">
+  Subject of the service order as provided in the request.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Description of the service order as provided in the request.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Initial status of the service order. Always set to `Em avaliação` for new service orders.
+</ResponseField>
+
+<ResponseField name="ProjectId" type="number">
+  ID of the associated project (if provided in request).
+</ResponseField>
+
+<ResponseField name="ClientId" type="number">
+  ID of the associated client. This is either:
+  - The ClientId from the associated Project (if ProjectId was provided)
+  - The ClientId from the request body
+  - null if neither was provided
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when the service order was created.
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when the service order was last updated (initially same as createdAt).
+</ResponseField>
+
+## Example Request
+
+```bash Create with Project
+curl -X POST "https://api.devefficiency.com/api/os" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "Website optimization and performance improvements",
+    "description": "Need to optimize the website loading time and implement caching strategies. Current load time is 8 seconds, target is under 2 seconds.",
+    "ProjectId": 45
+  }'
+```
+
+```bash Create with Client (No Project)
+curl -X POST "https://api.devefficiency.com/api/os" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "New API development project",
+    "description": "Build a REST API for customer management with authentication and CRUD operations",
+    "ClientId": 12
+  }'
+```
+
+```bash Minimal Request
+curl -X POST "https://api.devefficiency.com/api/os" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "Security audit request"
+  }'
+```
+
+## Example Response
+
+```json 200 - Success
+{
+  "id": 124,
+  "subject": "Website optimization and performance improvements",
+  "description": "Need to optimize the website loading time and implement caching strategies. Current load time is 8 seconds, target is under 2 seconds.",
+  "status": "Em avaliação",
+  "ProjectId": 45,
+  "ClientId": 12,
+  "createdAt": "2026-03-08T15:45:30.000Z",
+  "updatedAt": "2026-03-08T15:45:30.000Z"
+}
+```
+
+```json 400 - Bad Request
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "subject is required"
+}
+```
+
+```json 401 - Unauthorized
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "message": "Missing or invalid authentication token"
+}
+```
+
+```json 404 - Project Not Found
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Project with ID 45 not found"
+}
+```
+
+## Error Responses
+
+<ResponseField name="statusCode" type="number">
+  HTTP status code of the error.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error type description.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Detailed error message explaining the validation failure or issue.
+</ResponseField>
+
+## Automatic Protocol Creation
+
+When a service order is successfully created, a Protocol is automatically generated and associated with it. This protocol:
+
+- Starts with status `Em aberto` (Open)
+- Is used to track work progress, time entries, products, and receipts
+- Is linked to the service order via the `ServiceOrderId` field
+- Can be retrieved through the GET endpoint to see the full relationship
+
+## Client ID Resolution Logic
+
+The ClientId for the service order is determined using the following priority:
+
+1. If `ProjectId` is provided, the system looks up the project and uses its `ClientId`
+2. If no `ProjectId` is provided but `ClientId` is in the request, that value is used
+3. If neither is provided, `ClientId` is set to `null`
+
+This means that even if you provide both `ProjectId` and `ClientId`, the project's client will take precedence.
+
+## Notes
+
+- The `subject` field is required and cannot be empty
+- All new service orders are created with status `Em avaliação` (Under evaluation)
+- The description field is optional but recommended for clarity
+- A protocol is automatically created alongside each service order for tracking purposes
+- You can associate a service order with either a project or a client directly, or both
+- Maximum subject length is 128 characters

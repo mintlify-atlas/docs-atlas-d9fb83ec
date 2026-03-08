@@ -1,0 +1,263 @@
+---
+title: "List Service Orders"
+api: "GET /api/os"
+description: "Retrieve a paginated list of service orders with filtering and sorting options"
+---
+
+## Authentication
+
+This endpoint requires a valid JWT token in the Authorization header.
+
+```bash
+Authorization: Bearer <your_jwt_token>
+```
+
+## Query Parameters
+
+<ParamField query="page" type="number" default="1">
+  The page number for pagination. Used to navigate through paginated results.
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  The number of service orders to return per page. Set to `-1` to retrieve all service orders without pagination.
+</ParamField>
+
+<ParamField query="filter" type="string">
+  Special filter presets for common queries.
+  
+  <Expandable title="Available filters">
+    - `last_three` - Returns only the last 3 service orders (overrides limit parameter)
+    - `pending` - Returns service orders with pending status
+  </Expandable>
+</ParamField>
+
+<ParamField query="ClientId" type="number">
+  Filter service orders by a specific client ID. Only returns service orders associated with the specified client.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter service orders by status. Accepts a comma-separated list of status values to filter by multiple statuses.
+  
+  <Expandable title="Valid status values">
+    - `Em avaliação` - Under evaluation (default status for new service orders)
+    - `Orçamento enviado` - Quote sent to client
+    - `Na fila` - In queue for processing
+    - `Em correções` - Under corrections
+    - `Pendente` - Pending
+    - `Finalizado` - Completed
+    - `Cancelado` - Cancelled
+  </Expandable>
+  
+  **Example:** `status=Em avaliação,Na fila` returns service orders that are either under evaluation or in queue.
+</ParamField>
+
+## Response
+
+<ResponseField name="data" type="array">
+  Array of service order objects ordered by creation date (most recent first).
+  
+  <Expandable title="Service Order Object">
+    <ResponseField name="id" type="number">
+      Unique identifier for the service order.
+    </ResponseField>
+    
+    <ResponseField name="subject" type="string" required>
+      Subject or title of the service order (max 128 characters).
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Detailed description of the service order requirements.
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Current status of the service order. One of: `Em avaliação`, `Orçamento enviado`, `Na fila`, `Em correções`, `Pendente`, `Finalizado`, `Cancelado`.
+    </ResponseField>
+    
+    <ResponseField name="ProjectId" type="number">
+      ID of the associated project (if applicable).
+    </ResponseField>
+    
+    <ResponseField name="ClientId" type="number">
+      ID of the client who requested the service order.
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp when the service order was created.
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp when the service order was last updated.
+    </ResponseField>
+    
+    <ResponseField name="Client" type="object">
+      Client information associated with the service order.
+      
+      <Expandable title="Client Object">
+        <ResponseField name="id" type="number">Client ID</ResponseField>
+        <ResponseField name="name" type="string">Client name</ResponseField>
+        <ResponseField name="corporate_name" type="string">Corporate/legal name</ResponseField>
+        <ResponseField name="document" type="string">Tax document number</ResponseField>
+        <ResponseField name="email" type="string">Client email</ResponseField>
+        <ResponseField name="due_day" type="number">Billing due day</ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="Project" type="object">
+      Project information (if service order is associated with a project).
+      
+      <Expandable title="Project Object">
+        <ResponseField name="id" type="number">Project ID</ResponseField>
+        <ResponseField name="name" type="string">Project name</ResponseField>
+        <ResponseField name="url" type="string">Project URL</ResponseField>
+        <ResponseField name="type" type="string">Project type (API, Bot, WebSite, Automação, Crawler, Outros)</ResponseField>
+        <ResponseField name="fixed" type="boolean">Whether the project has a fixed price</ResponseField>
+        <ResponseField name="ClientId" type="number">Associated client ID</ResponseField>
+        <ResponseField name="Client" type="object">Nested client object with same structure as above</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total number of service orders matching the query filters (across all pages).
+</ResponseField>
+
+<ResponseField name="page" type="number">
+  Current page number.
+</ResponseField>
+
+<ResponseField name="limit" type="number">
+  Number of items per page.
+</ResponseField>
+
+## Example Request
+
+```bash cURL
+curl -X GET "https://api.devefficiency.com/api/os?page=1&limit=10&status=Em%20avaliação,Na%20fila" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```bash Filter by Client
+curl -X GET "https://api.devefficiency.com/api/os?ClientId=5&page=1&limit=20" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```bash Get Last Three Service Orders
+curl -X GET "https://api.devefficiency.com/api/os?filter=last_three" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```bash Get All Service Orders (No Pagination)
+curl -X GET "https://api.devefficiency.com/api/os?limit=-1" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+## Example Response
+
+```json 200 - Success
+{
+  "data": [
+    {
+      "id": 123,
+      "subject": "Website optimization and performance improvements",
+      "description": "Need to optimize the website loading time and implement caching strategies",
+      "status": "Em avaliação",
+      "ProjectId": 45,
+      "ClientId": 12,
+      "createdAt": "2026-03-08T10:30:00.000Z",
+      "updatedAt": "2026-03-08T10:30:00.000Z",
+      "Client": {
+        "id": 12,
+        "name": "Tech Solutions Inc",
+        "corporate_name": "Tech Solutions Incorporated",
+        "document": "12345678901234",
+        "email": "contact@techsolutions.com",
+        "due_day": 20
+      },
+      "Project": {
+        "id": 45,
+        "name": "E-commerce Platform",
+        "url": "https://shop.techsolutions.com",
+        "type": "WebSite",
+        "fixed": false,
+        "ClientId": 12,
+        "Client": {
+          "id": 12,
+          "name": "Tech Solutions Inc",
+          "corporate_name": "Tech Solutions Incorporated",
+          "document": "12345678901234",
+          "email": "contact@techsolutions.com",
+          "due_day": 20
+        }
+      }
+    },
+    {
+      "id": 122,
+      "subject": "API integration with payment gateway",
+      "description": "Integrate Stripe payment gateway with existing API",
+      "status": "Orçamento enviado",
+      "ProjectId": 38,
+      "ClientId": 8,
+      "createdAt": "2026-03-07T14:15:00.000Z",
+      "updatedAt": "2026-03-07T16:45:00.000Z",
+      "Client": {
+        "id": 8,
+        "name": "Digital Commerce Ltd",
+        "corporate_name": "Digital Commerce Limited",
+        "document": "98765432109876",
+        "email": "info@digitalcommerce.com",
+        "due_day": 15
+      },
+      "Project": {
+        "id": 38,
+        "name": "Payment Processing API",
+        "url": "https://api.digitalcommerce.com",
+        "type": "API",
+        "fixed": true,
+        "ClientId": 8,
+        "Client": {
+          "id": 8,
+          "name": "Digital Commerce Ltd",
+          "corporate_name": "Digital Commerce Limited",
+          "document": "98765432109876",
+          "email": "info@digitalcommerce.com",
+          "due_day": 15
+        }
+      }
+    }
+  ],
+  "total": 47,
+  "page": 1,
+  "limit": 10
+}
+```
+
+```json 401 - Unauthorized
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "message": "Missing or invalid authentication token"
+}
+```
+
+## Error Responses
+
+<ResponseField name="statusCode" type="number">
+  HTTP status code of the error.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error type description.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Detailed error message.
+</ResponseField>
+
+## Notes
+
+- Service orders are always returned in descending order by creation date (newest first)
+- When using the `last_three` filter, the limit parameter is automatically set to 3
+- The `limit=-1` option retrieves all records without pagination - use with caution on large datasets
+- Status filters support multiple values by separating them with commas
+- Both direct client associations and project-based client associations are included in responses

@@ -1,0 +1,484 @@
+---
+title: Billing System
+description: Manage invoices, payments, and client billing
+---
+
+## Overview
+
+The billing system manages invoices and payment tracking in DevEfficiency. Billings aggregate multiple protocols into a single invoice, track payment status, and generate professional PDF invoices for clients.
+
+<CardGroup cols={2}>
+  <Card title="Invoice Creation" icon="file-invoice" href="#creating-billings">
+    Generate invoices from protocols
+  </Card>
+  <Card title="Payment Tracking" icon="money-bill-wave" href="#payment-tracking">
+    Track due dates and payments
+  </Card>
+  <Card title="Protocol Linking" icon="link" href="#billing-protocols">
+    Link multiple protocols to one invoice
+  </Card>
+  <Card title="PDF Invoices" icon="file-pdf" href="#pdf-generation">
+    Generate professional invoice PDFs
+  </Card>
+</CardGroup>
+
+## Billing Structure
+
+Each billing record represents an invoice:
+
+```typescript
+interface Billing {
+  id: number
+  status: string                 // 'pendente', 'pago', 'cancelado'
+  total_value: number           // Total invoice amount
+  due_date?: Date               // Payment due date
+  payment_date?: Date           // Actual payment date
+  method: PaymentMethod         // Payment method
+  ClientId: number              // Client being billed
+  BankAccountId?: number        // Bank account for payment
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+### Payment Methods
+
+From `src/models/Billing.ts:67-72`:
+
+```typescript
+method: {
+  type: DataTypes.ENUM,
+  values: ['Pix', 'Boleto', 'Cartão', 'Transferência', 'Espécie'],
+  allowNull: false,
+  defaultValue: 'Boleto',
+}
+```
+
+<Tabs>
+  <Tab title="Pix">
+  Instant payment via Brazil's Pix system.
+  
+  **Characteristics:**
+  - Instant settlement
+  - Lower fees
+  - 24/7 availability
+  </Tab>
+  
+  <Tab title="Boleto">
+  Brazilian bank slip payment (default method).
+  
+  **Characteristics:**
+  - Standard billing method
+  - 1-3 day settlement
+  - Bank processing fees
+  </Tab>
+  
+  <Tab title="Cartão">
+  Credit or debit card payment.
+  
+  **Characteristics:**
+  - Immediate processing
+  - Card processing fees
+  - Chargeback risk
+  </Tab>
+  
+  <Tab title="Transferência">
+  Direct bank transfer.
+  
+  **Characteristics:**
+  - Same-day settlement
+  - Manual reconciliation
+  - Lower fees
+  </Tab>
+  
+  <Tab title="Espécie">
+  Cash payment.
+  
+  **Characteristics:**
+  - Immediate payment
+  - Manual tracking
+  - No processing fees
+  </Tab>
+</Tabs>
+
+## Billing Status
+
+Billings have three status values:
+
+<Accordion title="pendente (Default)">
+**Unpaid Invoice**: Payment is due but not yet received.
+
+**Characteristics:**
+- Default status on creation
+- `payment_date` is null
+- Can be edited or cancelled
+- Appears in outstanding invoices
+
+**Actions:**
+- Send invoice to client
+- Track due date
+- Send payment reminders
+</Accordion>
+
+<Accordion title="pago">
+**Paid Invoice**: Payment has been received.
+
+**Characteristics:**
+- `payment_date` is set
+- Cannot be modified (protected)
+- Included in revenue reports
+- Triggers protocol updates
+
+**Automatic Actions:**
+From `src/models/Billing.ts:91`, hooks update related protocols when payment is received.
+</Accordion>
+
+<Accordion title="cancelado">
+**Cancelled Invoice**: Invoice was cancelled.
+
+**Characteristics:**
+- Not included in revenue
+- Protocols remain in original status
+- Record preserved for history
+
+**Use Cases:**
+- Billing errors
+- Client disputes
+- Service cancellation
+</Accordion>
+
+<Warning>
+**Delete Protection**: From `src/controllers/billingController.ts:120-122`, only billings with status "pendente" can be deleted. Paid or cancelled billings cannot be removed.
+</Warning>
+
+## Creating Billings
+
+Billings can be created automatically via hooks or manually:
+
+### Manual Creation
+
+```typescript
+// From src/controllers/billingController.ts:89-92
+POST /billings
+
+{
+  "ClientId": 10,
+  "due_date": "2026-04-08",
+  "total_value": 1500.00,
+  "status": "pendente",
+  "method": "Boleto",
+  "BankAccountId": 1
+}
+```
+
+<Info>
+**Automatic Creation**: Per the comment in `src/controllers/billingController.ts:87-88`, billing creation is typically automatic via hooks. Manual creation is for exceptional cases.
+</Info>
+
+### Bank Account Association
+
+Optionally link billing to a specific bank account:
+
+```typescript
+// From src/models/Billing.ts:87-89
+Billing.belongsTo(BankAccount, {
+  foreignKey: 'BankAccountId',
+})
+```
+
+**Benefits:**
+- Track which account will receive payment
+- Automatic balance updates on payment
+- Multi-account reconciliation
+
+## Billing Protocols
+
+Billings link to protocols through a join table:
+
+```typescript
+interface BillingProtocol {
+  id: number
+  BillingId: number
+  ProtocolId: number
+}
+```
+
+**Relationship:**
+```typescript
+// From src/models/Billing.ts:82-85
+Billing.hasMany(BillingProtocol, {
+  onDelete: 'CASCADE',
+})
+BillingProtocol.belongsTo(Billing)
+```
+
+### Many-to-Many Design
+
+<CardGroup cols={2}>
+  <Card title="Multiple Protocols per Billing" icon="layer-group">
+    One invoice can include multiple service orders and subscriptions
+  </Card>
+  <Card title="Flexible Billing" icon="split">
+    Split large protocols across multiple invoices if needed
+  </Card>
+</CardGroup>
+
+### Viewing Billing Details
+
+```typescript
+// From src/controllers/billingController.ts:63-84
+GET /billings/:id
+
+// Response structure:
+{
+  "id": 1,
+  "status": "pendente",
+  "total_value": 1500.00,
+  "due_date": "2026-04-08",
+  "method": "Boleto",
+  "Client": {
+    "id": 10,
+    "name": "Acme Corp"
+  },
+  "BillingProtocols": [
+    {
+      "id": 1,
+      "Protocol": {
+        "id": 1,
+        "Service_order": {
+          "subject": "Website Redesign",
+          "Project": {...}
+        }
+      }
+    }
+  ]
+}
+```
+
+## Updating Billings
+
+Update billing details before payment:
+
+```typescript
+// From src/controllers/billingController.ts:95-107
+PUT /billings/:id
+
+{
+  "due_date": "2026-04-15",
+  "method": "Pix",
+  "BankAccountId": 2
+}
+```
+
+**Editable Fields:**
+- `due_date` - Payment deadline
+- `method` - Payment method
+- `BankAccountId` - Target bank account
+
+<Note>
+**Status Updates**: The billing status is typically updated through hooks when payments are processed. Manual status changes should be done carefully to maintain data integrity.
+</Note>
+
+## Querying Billings
+
+Filter billings by date range and client:
+
+```typescript
+GET /billings?startDate=2026-03-01&endDate=2026-03-31&ClientId=10&limit=10
+```
+
+**Query Parameters:**
+- `startDate` - Filter by due date start
+- `endDate` - Filter by due date end
+- `ClientId` - Filter by client
+- `limit` - Number of results (optional)
+
+**Date Filtering Logic:**
+From `src/controllers/billingController.ts:44-50`, includes billings with due dates in range OR null due dates:
+
+```typescript
+if (startDate && endDate) {
+  where.due_date = {
+    [Op.or]: {
+      [Op.between]: [startDate, endDate],
+      [Op.is]: null,
+    },
+  }
+}
+```
+
+## PDF Generation
+
+Generate professional invoice PDFs:
+
+```typescript
+GET /billings/:id/pdf
+```
+
+**PDF Contents:**
+From `src/controllers/billingController.ts:129-199`:
+- Billing details (amount, due date, method)
+- Client information
+- All linked protocols with:
+  - Service order or subscription details
+  - Protocol products and pricing
+  - Protocol registers (labor/expenses)
+  - Receipts and payments
+- Company branding from Config
+
+**Technical Implementation:**
+- Uses EJS template: `billing.ejs`
+- Puppeteer for PDF generation
+- Base64 encoded company logo
+- Filename: `charge_{client_name}_{timestamp}.pdf`
+
+### Config Integration
+
+From `src/controllers/billingController.ts:160-175`, company branding is loaded from Config:
+
+```typescript
+const config = await Config.findAll({})
+const configMap: { [key: string]: string | null } = {}
+config.forEach((cfg) => {
+  if (cfg.upload) {
+    // Load and base64 encode images
+    const file = fs.readFileSync(path.join(process.cwd(), 'tmp', cfg.value))
+    const extension = path.extname(cfg.value).substring(1)
+    if (['png', 'jpg', 'jpeg', 'gif'].includes(extension.toLowerCase())) {
+      const fileBase64 = Buffer.from(file).toString('base64')
+      configMap[cfg.type] = `data:image/${extension};base64,${fileBase64}`
+    }
+  } else configMap[cfg.type] = cfg.value
+})
+```
+
+<Info>
+**Professional Invoices**: PDF generation includes complete protocol details, making it easy for clients to understand what they're being billed for.
+</Info>
+
+## Deleting Billings
+
+Delete pending billings:
+
+```typescript
+DELETE /billings/:id
+```
+
+**Restrictions:**
+From `src/controllers/billingController.ts:119-126`:
+
+```typescript
+// Apenas cobranças pendentes podem ser excluídas
+if (billing.status !== 'pendente') {
+  return res.status(400).send({ 
+    message: 'Apenas cobranças pendentes podem ser excluídas' 
+  })
+}
+```
+
+**Cascade Effect:**
+When a billing is deleted, all BillingProtocol links are automatically deleted (CASCADE), but the protocols themselves remain.
+
+## Payment Tracking
+
+Track payment lifecycle:
+
+### Due Date Tracking
+
+```typescript
+{
+  "due_date": "2026-04-08",
+  "status": "pendente"
+}
+```
+
+Track upcoming payments and overdue invoices.
+
+### Payment Recording
+
+When payment is received:
+
+```typescript
+{
+  "status": "pago",
+  "payment_date": "2026-04-05"  // Set automatically
+}
+```
+
+**Automatic Actions:**
+The billing hook (`src/models/Billing.ts:91`) triggers updates to:
+- Bank account balances
+- Protocol statuses
+- Financial reports
+
+## Bank Account Integration
+
+Link billings to bank accounts:
+
+```typescript
+{
+  "BankAccountId": 1,
+  "method": "Transferência"
+}
+```
+
+**Benefits:**
+- Track expected deposits by account
+- Automatic balance updates on payment
+- Reconciliation support
+- Multi-account management
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Accurate Due Dates" icon="calendar">
+    Set realistic due dates based on client payment terms
+  </Card>
+  <Card title="Proper Method" icon="credit-card">
+    Select payment method matching client preference
+  </Card>
+  <Card title="Complete Protocol Linking" icon="link">
+    Ensure all relevant protocols are linked before generating PDF
+  </Card>
+  <Card title="Timely Updates" icon="clock">
+    Update payment status promptly when received
+  </Card>
+</CardGroup>
+
+## Common Workflows
+
+### Monthly Billing Cycle
+
+1. **Protocols Ready** → Multiple protocols with status "Liberado para pagamento"
+2. **Create Billing** → Aggregate protocols for client
+3. **Link Protocols** → Create BillingProtocol records
+4. **Generate PDF** → Create invoice PDF
+5. **Send to Client** → Email PDF invoice
+6. **Track Due Date** → Monitor payment deadline
+7. **Receive Payment** → Update status to "pago"
+8. **Update Protocols** → Hooks automatically close protocols
+
+### Project Completion
+
+1. **Service Order Complete** → Service order "Finalizado"
+2. **Protocol Closed** → Protocol status "Fechado"
+3. **Create Billing** → Generate invoice for project
+4. **Set Due Date** → Based on client terms
+5. **Generate Invoice** → Create PDF
+6. **Process Payment** → Mark as "pago" when received
+
+### Subscription Billing
+
+1. **Monthly Trigger** → Subscription generates protocols
+2. **Aggregate Protocols** → Group by client
+3. **Create Monthly Billing** → One invoice per client
+4. **Recurring Process** → Repeat each billing cycle
+5. **Payment Tracking** → Monitor subscription payments
+
+### Handling Disputes
+
+1. **Client Dispute** → Issue with invoice
+2. **Cancel Billing** → Set status to "cancelado"
+3. **Review Protocols** → Verify charges
+4. **Create New Billing** → Generate corrected invoice
+5. **Resolve Issue** → Process correct payment

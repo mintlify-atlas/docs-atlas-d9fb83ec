@@ -1,0 +1,461 @@
+---
+title: Protocol System
+description: Understanding protocols for tracking work items, products, and billing
+---
+
+## Overview
+
+Protocols are the financial tracking backbone of DevEfficiency. They link service orders and subscriptions to billable items (products and labor), manage payment status, and generate receipts. Every service order and subscription automatically gets a protocol.
+
+<CardGroup cols={2}>
+  <Card title="Protocol Status" icon="traffic-light" href="#protocol-status">
+    Track payment and closure workflow
+  </Card>
+  <Card title="Products & Services" icon="box" href="#products-and-services">
+    Link billable items to protocols
+  </Card>
+  <Card title="Labor Tracking" icon="clock" href="#protocol-registers">
+    Record hours and expenses
+  </Card>
+  <Card title="Receipts" icon="receipt" href="#receipts">
+    Generate and track payments
+  </Card>
+</CardGroup>
+
+## Protocol Structure
+
+Each protocol contains the following key fields:
+
+```typescript
+interface Protocol {
+  id: number
+  status: ProtocolStatus       // Payment/closure status
+  notes?: string               // Additional notes
+  ServiceOrderId?: number      // Link to service order
+  SubscriptionId?: number      // Link to subscription
+  closedAt?: Date             // When protocol was closed
+  createdAt: Date
+  updatedAt: Date
+}
+```
+
+<Info>
+Protocols are automatically created when service orders or subscriptions are created. You typically don't create protocols manually.
+</Info>
+
+## Protocol Status
+
+Protocols progress through a payment and closure workflow:
+
+### Status Values
+
+From `src/models/Protocol.ts:72-75`:
+
+```typescript
+status: {
+  type: DataTypes.ENUM,
+  values: ['Em aberto', 'Liberado para pagamento', 'Fechado', 'Cancelado'],
+  defaultValue: 'Em aberto',
+}
+```
+
+<Accordion title="1. Em aberto (Default)">
+**Initial Status**: Work is in progress, items are being added.
+
+**Activities:**
+- Add protocol products (billable items)
+- Add protocol registers (labor/expenses)
+- Update protocol notes
+- Work is ongoing
+
+**Cannot:**
+- Generate billing
+- Mark as paid
+</Accordion>
+
+<Accordion title="2. Liberado para pagamento">
+**Ready for Billing**: Work is complete, ready to bill client.
+
+**Activities:**
+- Generate invoices
+- Create receipts
+- Track payments
+- Include in billing PDFs
+
+**Billing Generation:**
+Protocols with this status are included in billing reports and invoices.
+</Accordion>
+
+<Accordion title="3. Fechado">
+**Closed**: Work is complete and paid, protocol is closed.
+
+**Triggers:**
+- Service order marked "Finalizado"
+- All payments received
+- Protocol manually closed
+
+**Effects:**
+- `closedAt` timestamp is set
+- Included in revenue calculations
+- Cannot be modified
+</Accordion>
+
+<Accordion title="4. Cancelado">
+**Cancelled**: Work was cancelled, no billing.
+
+**Triggers:**
+- Service order marked "Cancelado"
+- Client cancellation
+- Project abandonment
+
+**Effects:**
+- Excluded from billing
+- Excluded from revenue reports
+- Records preserved for history
+</Accordion>
+
+## Products and Services
+
+Protocols track billable items through protocol_products:
+
+### Protocol Products
+
+```typescript
+interface ProtocolProduct {
+  id: number
+  ProtocolId: number
+  ProductId: number
+  quantity: number
+  unit_price: number
+  total: number
+}
+```
+
+**Relationship:**
+```typescript
+// From src/models/Protocol.ts:101-105
+Protocol.hasMany(Protocol_product, {
+  onDelete: 'RESTRICT',
+})
+
+Protocol_product.belongsTo(Protocol)
+```
+
+### Product Association
+
+Products are linked from the product catalog:
+
+```typescript
+{
+  "Protocol": {
+    "id": 1,
+    "Protocol_products": [
+      {
+        "id": 1,
+        "quantity": 5,
+        "unit_price": 100.00,
+        "total": 500.00,
+        "Product": {
+          "id": 10,
+          "name": "Web Development Hour",
+          "coust": 40.00  // Cost for margin calculation
+        }
+      }
+    ]
+  }
+}
+```
+
+<Warning>
+**RESTRICT Delete**: Cannot delete a protocol if it has associated products. Remove products first or change the deletion approach.
+</Warning>
+
+## Protocol Registers
+
+Protocol registers track labor hours and expenses:
+
+### Register Structure
+
+```typescript
+interface ProtocolRegister {
+  id: number
+  ProtocolId: number
+  type: 'Hora' | 'Despesa'    // Labor hours or expenses
+  description: string
+  value: number
+  date: Date
+}
+```
+
+### Register Types
+
+<Tabs>
+  <Tab title="Hora (Labor)">
+  Track billable labor hours:
+  
+  ```typescript
+  {
+    "type": "Hora",
+    "description": "Frontend development",
+    "value": 8.5,              // Hours worked
+    "date": "2026-03-08"
+  }
+  ```
+  
+  Used for time-based billing and project costing.
+  </Tab>
+  
+  <Tab title="Despesa (Expense)">
+  Track project expenses:
+  
+  ```typescript
+  {
+    "type": "Despesa",
+    "description": "Server hosting costs",
+    "value": 150.00,           // Expense amount
+    "date": "2026-03-08"
+  }
+  ```
+  
+  Used for direct cost attribution and DRE reporting.
+  </Tab>
+</Tabs>
+
+**DRE Integration:**
+From `src/controllers/dreReportController.ts:65-77`, expenses are included in direct costs for profit calculation:
+
+```typescript
+const serviceExpenses = await Protocol_register.findAll({
+  where: { type: 'Despesa' },
+  include: [{
+    model: Protocol,
+    where: {
+      closedAt: { [Op.between]: [startDate, endDate] },
+      status: 'Fechado'
+    },
+    required: true
+  }]
+})
+```
+
+## Receipts
+
+Receipts track payments received for protocols:
+
+### Receipt Structure
+
+```typescript
+interface Receipt {
+  id: number
+  ProtocolId: number
+  value: number
+  note?: string
+  date: Date
+  createdAt: Date
+}
+```
+
+### Creating Receipts
+
+```typescript
+{
+  "ProtocolId": 1,
+  "value": 500.00,
+  "note": "Payment for website development",
+  "date": "2026-03-08"
+}
+```
+
+**Receipt Relationship:**
+```typescript
+// From src/models/Protocol.ts:107-111
+Protocol.hasMany(Receipts, {
+  onDelete: 'RESTRICT',
+})
+
+Receipts.belongsTo(Protocol)
+```
+
+<Info>
+**Financial Reporting**: Receipts are used in the financial history and DRE reports to track actual revenue. See `src/controllers/financialsController.ts:47-75`.
+</Info>
+
+## Querying Protocols
+
+Filter protocols by client, status, and pagination:
+
+```typescript
+GET /protocols?page=1&limit=10&ClientId=10&status=Liberado para pagamento
+```
+
+**Query Parameters:**
+- `page` - Page number (default: 1)
+- `limit` - Items per page (default: 10, use -1 for all)
+- `status` - Comma-separated status values
+- `ClientId` - Filter by client (via service orders or subscriptions)
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "status": "Liberado para pagamento",
+      "Protocol_registers": [...],
+      "Protocol_products": [...],
+      "Receipts": [...],
+      "Service_order": {
+        "id": 1,
+        "subject": "Website Redesign",
+        "Client": {...}
+      }
+    }
+  ],
+  "total": 15,
+  "page": 1,
+  "limit": 10
+}
+```
+
+### Client Filtering
+
+From `src/controllers/protocolsController.ts:48-57`, client filtering works through service orders and subscriptions:
+
+```typescript
+if (ClientId) {
+  const os_ids = (await Service_order.findAll({ 
+    where: { ClientId: ClientId } 
+  })).map((v) => v.id)
+  
+  const subscription_ids = (await Subscription.findAll({ 
+    where: { ClientId: ClientId } 
+  })).map((v) => v.id)
+
+  opts.where = {
+    [Op.or]: {
+      SubscriptionId: subscription_ids,
+      ServiceOrderId: os_ids,
+    },
+  }
+}
+```
+
+## PDF Generation
+
+Generate combined protocol PDFs for clients:
+
+```typescript
+GET /protocols/pdf?ClientId=10&type=Liberado para pagamento
+```
+
+**Parameters:**
+- `ClientId` - Required, client to generate PDF for
+- `type` - Protocol status to include (default: "Liberado para pagamento")
+
+**PDF Contents:**
+From `src/controllers/protocolsController.ts:100-172`:
+- All service orders for client with matching protocol status
+- All subscriptions for client with matching protocol status
+- Protocol products with pricing
+- Protocol registers (labor and expenses)
+- Receipts and payment information
+- Company branding from Config
+
+**Technical Details:**
+- Uses `budget_multi.ejs` template
+- Puppeteer for PDF generation
+- Filename: `protocols_{client_name}_{timestamp}.pdf`
+
+<Note>
+**Multi-Protocol PDF**: This endpoint generates a single PDF containing all protocols for a client with the specified status. Useful for monthly billing packages.
+</Note>
+
+## Updating Protocols
+
+Update protocol status and notes:
+
+```typescript
+// From src/controllers/protocolsController.ts:87-97
+PUT /protocols/:id
+
+{
+  "status": "Liberado para pagamento",
+  "notes": "Ready for March billing cycle"
+}
+```
+
+**Status Change Effects:**
+- **To "Fechado"**: Sets `closedAt` timestamp (via hook)
+- **To "Liberado para pagamento"**: Includes in billing generation
+- **To "Cancelado"**: Excludes from all billing
+
+### Automatic Updates
+
+Protocols are automatically updated when service orders change:
+
+```typescript
+// From src/controllers/serviceOrdersController.ts:99-100
+if (status == 'Finalizado') await protocol?.update({ status: 'Fechado' })
+if (status == 'Cancelado') await protocol?.update({ status: 'Cancelado' })
+```
+
+## Billing Integration
+
+Protocols link to billing through the BillingProtocol join table:
+
+```typescript
+// From src/models/Protocol.ts:113-117
+Protocol.hasMany(BillingProtocol, {
+  onDelete: 'RESTRICT',
+})
+
+BillingProtocol.belongsTo(Protocol)
+```
+
+**Billing Relationship:**
+- Many-to-many through BillingProtocol
+- Multiple protocols can be in one billing
+- One protocol can be split across multiple billings
+- Tracks which protocols are included in each invoice
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Status Progression" icon="arrow-right">
+    Move protocols through statuses systematically: Em aberto → Liberado para pagamento → Fechado
+  </Card>
+  <Card title="Regular Updates" icon="clock-rotate-left">
+    Update protocol registers and products as work progresses
+  </Card>
+  <Card title="Detailed Notes" icon="note-sticky">
+    Use notes field to track important protocol information
+  </Card>
+  <Card title="Receipt Tracking" icon="money-bill">
+    Create receipts promptly when payments are received
+  </Card>
+</CardGroup>
+
+## Common Workflows
+
+### Service Order Billing
+
+1. **Service Order Created** → Protocol auto-created with status "Em aberto"
+2. **Add Products/Services** → Protocol products linked
+3. **Track Labor** → Protocol registers added
+4. **Work Complete** → Service order "Finalizado", protocol → "Fechado"
+5. **Generate Billing** → Protocol included in invoice
+6. **Payment Received** → Receipt created
+
+### Subscription Billing
+
+1. **Subscription Created** → Protocol auto-created
+2. **Monthly Cycle** → Protocol status → "Liberado para pagamento"
+3. **Generate Invoice** → Include all "Liberado" protocols
+4. **Payment Received** → Create receipt, close protocol
+
+### Multi-Protocol Invoice
+
+1. **Multiple Protocols Ready** → All have status "Liberado para pagamento"
+2. **Generate Combined PDF** → Use `/protocols/pdf?ClientId=X`
+3. **Create Billing Record** → Link all protocols to billing
+4. **Track Payment** → Update all protocols when paid

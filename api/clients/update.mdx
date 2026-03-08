@@ -1,0 +1,262 @@
+---
+title: 'Update Client'
+api: 'PUT /api/clients/:id'
+description: 'Update an existing client'
+---
+
+## Overview
+
+Updates an existing client's information. All fields in the request body are optional - only include the fields you want to update. The client is identified by the ID in the URL path.
+
+## Authentication
+
+<Note>
+  This endpoint requires authentication via JWT token in the Authorization header.
+</Note>
+
+## Request
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  JWT token for authentication
+  
+  Format: `Bearer <token>`
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`
+</ParamField>
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique identifier of the client to update
+</ParamField>
+
+### Request Body
+
+<Note>
+  All fields are optional. Only include the fields you want to update. Fields not included in the request will retain their current values.
+</Note>
+
+<ParamField body="name" type="string">
+  Client name (max 128 characters)
+  
+  Update the primary identifier for the client.
+</ParamField>
+
+<ParamField body="corporate_name" type="string">
+  Corporate or legal name of the client (max 255 characters)
+  
+  Update the official business name.
+</ParamField>
+
+<ParamField body="document" type="string">
+  Client's identification document number (max 15 characters)
+  
+  <Warning>
+    Special characters will be automatically stripped. Only alphanumeric characters are stored.
+  </Warning>
+  
+  Update the tax ID, VAT number, or business registration number.
+</ParamField>
+
+<ParamField body="email" type="string">
+  Client's primary email address (max 128 characters)
+  
+  Update the email used for communications and invoicing.
+</ParamField>
+
+<ParamField body="due_day" type="integer">
+  Day of the month for payment due dates (1-31)
+  
+  Update the billing due date for this client.
+</ParamField>
+
+## Response
+
+### Success Response (200 OK)
+
+Returns the updated client object with all current values.
+
+<ResponseField name="client" type="object">
+  The updated client object
+  
+  <Expandable title="Client Fields">
+    <ResponseField name="id" type="integer">
+      Unique identifier for the client (unchanged)
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Current client name (updated if provided in request)
+    </ResponseField>
+    
+    <ResponseField name="corporate_name" type="string">
+      Current corporate name (updated if provided in request)
+    </ResponseField>
+    
+    <ResponseField name="document" type="string">
+      Current document number with special characters removed (updated if provided in request)
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Current email address (updated if provided in request)
+    </ResponseField>
+    
+    <ResponseField name="due_day" type="integer">
+      Current due day (updated if provided in request)
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp of when the client was originally created (unchanged)
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 timestamp of when the client was last updated (set to current time)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Error Responses
+
+<ResponseField name="400 Bad Request">
+  Returned when validation fails
+  
+  ```json
+  {
+    "statusCode": 400,
+    "error": "Bad Request",
+    "message": "Validation error: Invalid email format"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  Returned when authentication token is missing or invalid
+  
+  ```json
+  {
+    "statusCode": 401,
+    "error": "Unauthorized",
+    "message": "Invalid or missing authentication token"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="404 Not Found">
+  Returned when the client with the specified ID does not exist
+  
+  ```json
+  {
+    "statusCode": 404,
+    "error": "Not Found",
+    "message": "Client not found"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="500 Internal Server Error">
+  Returned when an unexpected server error occurs
+  
+  ```json
+  {
+    "statusCode": 500,
+    "error": "Internal Server Error",
+    "message": "An error occurred while updating the client"
+  }
+  ```
+</ResponseField>
+
+## Example Requests
+
+### Update Single Field
+
+```bash cURL
+curl -X PUT https://api.devefficiency.com/api/clients/42 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newemail@acme.com"
+  }'
+```
+
+### Update Multiple Fields
+
+```bash cURL
+curl -X PUT https://api.devefficiency.com/api/clients/42 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Global Corporation",
+    "corporate_name": "Acme Global Corporation Ltd.",
+    "email": "contact@acmeglobal.com",
+    "due_day": 30
+  }'
+```
+
+### Update Document with Formatting
+
+```bash cURL
+curl -X PUT https://api.devefficiency.com/api/clients/42 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "document": "98.765.432/0001-10"
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "id": 42,
+  "name": "Acme Global Corporation",
+  "corporate_name": "Acme Global Corporation Ltd.",
+  "document": "12345678000123",
+  "email": "contact@acmeglobal.com",
+  "due_day": 30,
+  "createdAt": "2026-03-01T10:00:00.000Z",
+  "updatedAt": "2026-03-08T15:45:00.000Z"
+}
+```
+
+## Implementation Details
+
+### Document Sanitization
+
+Just like the create endpoint, the `document` field is automatically sanitized to remove all non-alphanumeric characters before storage.
+
+**Examples:**
+- Input: `"98.765.432/0001-10"` → Stored: `"98765432000110"`
+- Input: `"GB-VAT-987654321"` → Stored: `"GBVAT987654321"`
+
+### Partial Updates
+
+This endpoint supports partial updates, meaning:
+- You only need to include fields you want to change
+- Fields not included in the request remain unchanged
+- The `updatedAt` timestamp is always updated, even if no field values change
+
+<Note>
+  To clear a field value, you would need to explicitly send `null` or an empty string, depending on the field's constraints. However, the `name` field cannot be null as it's required.
+</Note>
+
+### Update Process
+
+The controller follows this sequence:
+1. Finds the client by ID using `Client.findByPk(id)`
+2. If document is provided, sanitizes it by removing special characters
+3. Updates the client instance with new values using `client.update()`
+4. Saves the changes using `client.save()`
+5. Returns the updated client object
+
+<Warning>
+  If the client with the specified ID doesn't exist, the endpoint may return an error or null. Always verify the client exists before attempting updates in production applications.
+</Warning>
+
+## Related Endpoints
+
+- [List Clients](/api/clients/list) - Retrieve all clients
+- [Get Client](/api/clients/get) - Retrieve a specific client by ID
+- [Create Client](/api/clients/create) - Create a new client

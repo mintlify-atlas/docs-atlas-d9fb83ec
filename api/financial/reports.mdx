@@ -1,0 +1,550 @@
+---
+title: 'Financial Reports'
+description: 'Generate comprehensive financial reports and analytics'
+---
+
+The Financial Reports API provides powerful reporting endpoints for analyzing financial data, including transaction history, income statements (DRE), and expense analysis. These reports help you understand cash flow, profitability, and spending patterns.
+
+## Financial History
+
+Retrieve a comprehensive transaction history showing all cash inflows and outflows, including receipts, payables, and bank transfers.
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/financial-history?startDate=2024-03-01&endDate=2024-03-31' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json'
+```
+
+```javascript JavaScript
+const params = new URLSearchParams({
+  startDate: '2024-03-01',
+  endDate: '2024-03-31'
+});
+
+const response = await fetch(
+  `https://api.devefficiency.com/api/financial-history?${params}`,
+  {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer YOUR_JWT_TOKEN',
+      'Content-Type': 'application/json'
+    }
+  }
+);
+const history = await response.json();
+```
+
+```python Python
+import requests
+
+params = {
+  'startDate': '2024-03-01',
+  'endDate': '2024-03-31'
+}
+
+response = requests.get(
+  'https://api.devefficiency.com/api/financial-history',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  params=params
+)
+history = response.json()
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="startDate" type="string">
+  Start date for the report period (ISO 8601 format or YYYY-MM-DD). If omitted, returns all historical data.
+</ParamField>
+
+<ParamField query="endDate" type="string">
+  End date for the report period (ISO 8601 format or YYYY-MM-DD). If omitted, returns all historical data.
+</ParamField>
+
+### Response
+
+Returns an array of transaction objects sorted by date in descending order (most recent first).
+
+<ResponseField name="transactions" type="array">
+  Array of standardized transaction objects combining payables, receipts, and bank transfers
+  <Expandable title="Transaction Object">
+    <ResponseField name="date" type="string">
+      Date when the transaction occurred
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Description of the transaction
+    </ResponseField>
+    <ResponseField name="value" type="number">
+      Transaction amount. Positive for inflows, negative for outflows.
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Transaction type: `inflow` or `outflow`
+    </ResponseField>
+    <ResponseField name="relatedTo" type="string">
+      Related entity (supplier name, service order subject, subscription name, or transfer note)
+    </ResponseField>
+    <ResponseField name="bankAccountId" type="number">
+      Bank account ID (if applicable)
+    </ResponseField>
+    <ResponseField name="showInSummary" type="boolean">
+      Whether to include this transaction in summary calculations. Bank transfers are marked false to prevent double-counting.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+[
+  {
+    "date": "2024-03-28T10:15:00.000Z",
+    "description": "Office supplies - March 2024",
+    "value": -1250.50,
+    "type": "outflow",
+    "relatedTo": "Office Depot",
+    "showInSummary": true
+  },
+  {
+    "date": "2024-03-25T14:30:00.000Z",
+    "description": "Protocol #1234 - Website Development",
+    "value": 15000.00,
+    "type": "inflow",
+    "relatedTo": "Website Development",
+    "showInSummary": true
+  },
+  {
+    "date": "2024-03-20T11:00:00.000Z",
+    "description": "Annual Software License",
+    "value": 12000.00,
+    "type": "inflow",
+    "relatedTo": "Premium Support Plan",
+    "showInSummary": true
+  },
+  {
+    "date": "2024-03-15T16:45:00.000Z",
+    "description": "Main Operating Account: Transferência para Savings Account",
+    "value": -10000.00,
+    "type": "outflow",
+    "relatedTo": "Transferência entre contas",
+    "showInSummary": false
+  },
+  {
+    "date": "2024-03-15T16:46:00.000Z",
+    "description": "Savings Account: Recebimento de Main Operating Account",
+    "value": 10000.00,
+    "type": "inflow",
+    "relatedTo": "Transferência entre contas",
+    "showInSummary": false
+  },
+  {
+    "date": "2024-03-10T09:30:00.000Z",
+    "description": "Cloud hosting - AWS",
+    "value": -3500.00,
+    "type": "outflow",
+    "relatedTo": "Amazon Web Services",
+    "showInSummary": true
+  }
+]
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+<Info>
+  The financial history includes:
+  - **Outflows**: All paid payables (status = 'pago') filtered by paymentDate
+  - **Inflows**: All receipts filtered by createdAt
+  - **Bank Transfers**: Inter-account transfers shown as paired outflow/inflow transactions with `showInSummary: false`
+</Info>
+
+## DRE Report (Income Statement)
+
+Generate a DRE (Demonstração do Resultado do Exercício) report, which is similar to a profit and loss statement. This report shows revenue, costs, expenses, and profitability for a specific period.
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/dre-report?month=3&year=2024' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json'
+```
+
+```javascript JavaScript
+const params = new URLSearchParams({
+  month: '3',
+  year: '2024'
+});
+
+const response = await fetch(
+  `https://api.devefficiency.com/api/dre-report?${params}`,
+  {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer YOUR_JWT_TOKEN',
+      'Content-Type': 'application/json'
+    }
+  }
+);
+const dreReport = await response.json();
+```
+
+```python Python
+import requests
+
+params = {
+  'month': '3',
+  'year': '2024'
+}
+
+response = requests.get(
+  'https://api.devefficiency.com/api/dre-report',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  params=params
+)
+dre_report = response.json()
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="month" type="string">
+  Month number (1-12). Defaults to current month if not specified.
+</ParamField>
+
+<ParamField query="year" type="string">
+  Year (e.g., 2024). Defaults to current year if not specified.
+</ParamField>
+
+### Response
+
+<ResponseField name="revenue" type="number">
+  Total revenue from receipts for protocols closed in the period
+</ResponseField>
+
+<ResponseField name="directCosts" type="object">
+  Cost of goods sold (CPV) breakdown
+  <Expandable title="Direct Costs">
+    <ResponseField name="productCosts" type="number">
+      Total cost of products used in closed protocols
+    </ResponseField>
+    <ResponseField name="serviceExpenses" type="number">
+      Total service expenses (protocol registers with type = 'Despesa')
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="operatingExpenses" type="object">
+  Fixed operating expenses breakdown
+  <Expandable title="Operating Expenses">
+    <ResponseField name="total" type="number">
+      Total operating expenses from payables
+    </ResponseField>
+    <ResponseField name="byCostCenter" type="array">
+      Array of cost center expense breakdowns
+      <Expandable title="Cost Center Breakdown">
+        <ResponseField name="name" type="string">
+          Cost center name
+        </ResponseField>
+        <ResponseField name="value" type="number">
+          Total expenses for this cost center
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="grossProfit" type="number">
+  Gross profit (revenue - direct costs)
+</ResponseField>
+
+<ResponseField name="netResult" type="number">
+  Net result (gross profit - operating expenses)
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+{
+  "revenue": 125000.00,
+  "directCosts": {
+    "productCosts": 35000.00,
+    "serviceExpenses": 12500.00
+  },
+  "operatingExpenses": {
+    "total": 45000.00,
+    "byCostCenter": [
+      {
+        "name": "Administrative",
+        "value": 15000.00
+      },
+      {
+        "name": "Technology",
+        "value": 18000.00
+      },
+      {
+        "name": "Marketing",
+        "value": 8000.00
+      },
+      {
+        "name": "Geral",
+        "value": 4000.00
+      }
+    ]
+  },
+  "grossProfit": 77500.00,
+  "netResult": 32500.00
+}
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+### DRE Calculation Logic
+
+<Tabs>
+  <Tab title="Revenue">
+    Revenue is calculated from all receipts associated with protocols that were **closed** during the period.
+    
+    - Filters protocols by `closedAt` date within the month/year
+    - Only includes protocols with `status = 'Fechado'`
+    - Sums all receipt values linked to these protocols
+  </Tab>
+  <Tab title="Direct Costs">
+    Direct costs include:
+    
+    **Product Costs:**
+    - Products used in protocols closed during the period
+    - Based on product cost (COGS) from the Product model
+    
+    **Service Expenses:**
+    - Protocol register entries with `type = 'Despesa'`
+    - Only from protocols closed in the period
+  </Tab>
+  <Tab title="Operating Expenses">
+    Operating expenses are fixed costs from payables:
+    
+    - Payables **created** during the period (by `createdAt`)
+    - Excludes cancelled payables (`status != 'cancelado'`)
+    - Grouped and summed by cost center
+    - Payables without a cost center are grouped under "Geral"
+  </Tab>
+  <Tab title="Profitability">
+    **Gross Profit** = Revenue - (Product Costs + Service Expenses)
+    
+    **Net Result** = Gross Profit - Operating Expenses
+    
+    A positive net result indicates profit, while negative indicates a loss for the period.
+  </Tab>
+</Tabs>
+
+## Expense Report
+
+Generate a hierarchical expense report showing paid expenses organized by cost center structure. This report rolls up expenses from child cost centers to parents, providing a complete organizational view.
+
+<CodeGroup>
+```bash cURL
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/expense-report?startDate=2024-03-01&endDate=2024-03-31' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json'
+```
+
+```javascript JavaScript
+const params = new URLSearchParams({
+  startDate: '2024-03-01',
+  endDate: '2024-03-31'
+});
+
+const response = await fetch(
+  `https://api.devefficiency.com/api/expense-report?${params}`,
+  {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer YOUR_JWT_TOKEN',
+      'Content-Type': 'application/json'
+    }
+  }
+);
+const expenseReport = await response.json();
+```
+
+```python Python
+import requests
+
+params = {
+  'startDate': '2024-03-01',
+  'endDate': '2024-03-31'
+}
+
+response = requests.get(
+  'https://api.devefficiency.com/api/expense-report',
+  headers={
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  params=params
+)
+expense_report = response.json()
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="startDate" type="string">
+  Start date for the report period (ISO 8601 format or YYYY-MM-DD). If omitted, returns all historical expense data.
+</ParamField>
+
+<ParamField query="endDate" type="string">
+  End date for the report period (ISO 8601 format or YYYY-MM-DD). If omitted, returns all historical expense data.
+</ParamField>
+
+### Response
+
+Returns an array of root-level cost center nodes with hierarchical expense data.
+
+<ResponseField name="costCenters" type="array">
+  Array of cost center tree nodes with rolled-up expense totals
+  <Expandable title="Cost Center Node">
+    <ResponseField name="id" type="number">
+      Cost center unique identifier
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Cost center name
+    </ResponseField>
+    <ResponseField name="total" type="number">
+      Total expenses for this cost center, including all children (rolled up)
+    </ResponseField>
+    <ResponseField name="children" type="array">
+      Array of child cost center nodes (recursively structured)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseExample>
+```json 200 - Success
+[
+  {
+    "id": 1,
+    "name": "Operations",
+    "total": 32500.00,
+    "children": [
+      {
+        "id": 3,
+        "name": "Administrative",
+        "total": 18750.00,
+        "children": [
+          {
+            "id": 5,
+            "name": "Office Supplies",
+            "total": 3250.50,
+            "children": []
+          },
+          {
+            "id": 6,
+            "name": "Travel",
+            "total": 15499.50,
+            "children": []
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "name": "Facilities",
+        "total": 13750.00,
+        "children": []
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Development",
+    "total": 25000.00,
+    "children": [
+      {
+        "id": 7,
+        "name": "Technology",
+        "total": 25000.00,
+        "children": [
+          {
+            "id": 9,
+            "name": "Cloud Infrastructure",
+            "total": 18000.00,
+            "children": []
+          },
+          {
+            "id": 10,
+            "name": "Software Licenses",
+            "total": 7000.00,
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+]
+```
+
+```json 500 - Internal Server Error
+{
+  "error": "Internal Server Error"
+}
+```
+</ResponseExample>
+
+### Roll-up Calculation
+
+The expense report uses a bottom-up aggregation approach:
+
+1. **Direct Expenses**: Each cost center's `total` initially includes only payables directly assigned to it
+2. **Child Aggregation**: The totals from all child cost centers are recursively summed
+3. **Parent Roll-up**: Each parent's total includes its own direct expenses plus all children's totals
+4. **Tree Structure**: Only root-level cost centers (ParentId = null) are returned at the top level
+
+**Example:**
+- Office Supplies (leaf): $3,250.50 in direct expenses
+- Travel (leaf): $15,499.50 in direct expenses
+- Administrative (parent): $0 direct + $3,250.50 + $15,499.50 = $18,750.00 total
+- Facilities (leaf): $13,750.00 in direct expenses
+- Operations (root): $0 direct + $18,750.00 + $13,750.00 = $32,500.00 total
+
+<Info>
+  The expense report only includes **paid** payables (status = 'pago') filtered by payment date. Pending or cancelled payables are excluded from the report.
+</Info>
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Cash Flow Analysis" icon="chart-line">
+    Use Financial History to track cash movements and identify patterns in inflows and outflows over time.
+  </Card>
+  <Card title="Profitability Tracking" icon="chart-pie">
+    Use DRE Report to understand monthly profitability, gross margins, and operating efficiency.
+  </Card>
+  <Card title="Budget Monitoring" icon="wallet">
+    Use Expense Report to monitor spending by department and compare against budgets.
+  </Card>
+  <Card title="Cost Optimization" icon="magnifying-glass-dollar">
+    Identify high-expense cost centers and drill down into specific spending categories.
+  </Card>
+</CardGroup>
+
+## Related Resources
+
+- [Payables](/api/financial/payables) - Expense data used in reports
+- [Cost Centers](/api/financial/cost-centers) - Organizational structure for expense reporting
+- [Bank Accounts](/api/financial/bank-accounts) - Account balances and transaction sources
+- [Bank Transfers](/api/financial/bank-transfers) - Inter-account movements in financial history

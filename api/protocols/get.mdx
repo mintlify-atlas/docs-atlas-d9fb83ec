@@ -1,0 +1,368 @@
+---
+title: "Get Protocol"
+api: "GET /api/protocols/:id"
+description: "Retrieve detailed information about a specific protocol by ID"
+---
+
+## Authentication
+
+This endpoint requires JWT authentication. Include the bearer token in the Authorization header.
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  Unique identifier of the protocol to retrieve
+</ParamField>
+
+## Response
+
+Returns a single protocol object with all nested relationships.
+
+<ResponseField name="id" type="integer">
+  Unique protocol identifier
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current protocol status. Possible values:
+  - `Em aberto` - Open protocol, actively being worked on
+  - `Liberado para pagamento` - Released for payment, ready for billing
+  - `Fechado` - Closed, protocol is complete
+  - `Cancelado` - Cancelled, protocol was terminated
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  Additional notes or comments about the protocol
+</ResponseField>
+
+<ResponseField name="ServiceOrderId" type="integer | null">
+  Associated service order ID. Will be `null` if the protocol belongs to a subscription instead
+</ResponseField>
+
+<ResponseField name="SubscriptionId" type="integer | null">
+  Associated subscription ID. Will be `null` if the protocol belongs to a service order instead
+</ResponseField>
+
+<ResponseField name="closedAt" type="datetime | null">
+  Timestamp when the protocol was closed. `null` if protocol is still open
+</ResponseField>
+
+<ResponseField name="createdAt" type="datetime">
+  Protocol creation timestamp
+</ResponseField>
+
+<ResponseField name="updatedAt" type="datetime">
+  Last update timestamp
+</ResponseField>
+
+<ResponseField name="Protocol_registers" type="array">
+  Array of services and expenses registered in this protocol
+  
+  <Expandable title="Protocol Register Object">
+    <ResponseField name="id" type="integer">
+      Register identifier
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Description of the service or expense
+    </ResponseField>
+    
+    <ResponseField name="value" type="float">
+      Monetary value of the service or expense
+    </ResponseField>
+    
+    <ResponseField name="type" type="string">
+      Type of register:
+      - `Serviço` - Service performed
+      - `Despesa` - Expense incurred
+    </ResponseField>
+    
+    <ResponseField name="ProtocolId" type="integer">
+      Associated protocol ID
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="datetime">
+      Creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="datetime">
+      Last update timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="Protocol_products" type="array">
+  Array of products associated with this protocol
+  
+  <Expandable title="Protocol Product Object">
+    <ResponseField name="id" type="integer">
+      Protocol product identifier
+    </ResponseField>
+    
+    <ResponseField name="charge_type" type="string">
+      Charging frequency for this product:
+      - `Único` - One-time charge
+      - `Mensal` - Monthly recurring charge
+      - `Anual` - Annual recurring charge
+    </ResponseField>
+    
+    <ResponseField name="value" type="float">
+      Product price for this specific protocol (may differ from default product price)
+    </ResponseField>
+    
+    <ResponseField name="ProductId" type="integer">
+      Associated product ID
+    </ResponseField>
+    
+    <ResponseField name="ProtocolId" type="integer">
+      Associated protocol ID
+    </ResponseField>
+    
+    <ResponseField name="LicenseId" type="integer | null">
+      Associated license ID if the product generates a license. `null` if no license was generated
+    </ResponseField>
+    
+    <ResponseField name="Product" type="object">
+      Detailed product information
+      
+      <Expandable title="Product Details">
+        <ResponseField name="id" type="integer">
+          Product identifier
+        </ResponseField>
+        
+        <ResponseField name="description" type="string">
+          Product description
+        </ResponseField>
+        
+        <ResponseField name="value" type="float">
+          Default product price
+        </ResponseField>
+        
+        <ResponseField name="coust" type="float">
+          Product cost (for internal margin calculation)
+        </ResponseField>
+        
+        <ResponseField name="generate_license" type="boolean">
+          Whether this product automatically generates a license upon purchase
+        </ResponseField>
+        
+        <ResponseField name="createdAt" type="datetime">
+          Product creation timestamp
+        </ResponseField>
+        
+        <ResponseField name="updatedAt" type="datetime">
+          Product last update timestamp
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="datetime">
+      Protocol product creation timestamp
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="datetime">
+      Protocol product last update timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="Receipts" type="array">
+  Array of payment receipts associated with this protocol
+  
+  <Expandable title="Receipt Object">
+    <ResponseField name="id" type="integer">
+      Receipt identifier
+    </ResponseField>
+    
+    <ResponseField name="method" type="string">
+      Payment method used:
+      - `Pix` - Brazilian instant payment system
+      - `Boleto` - Brazilian payment slip
+      - `Cartão` - Credit/debit card
+      - `Transferência` - Bank transfer
+      - `Espécie` - Cash payment
+    </ResponseField>
+    
+    <ResponseField name="value" type="float">
+      Payment amount received
+    </ResponseField>
+    
+    <ResponseField name="note" type="string">
+      Additional notes about the payment (e.g., transaction ID, check number)
+    </ResponseField>
+    
+    <ResponseField name="ProtocolId" type="integer">
+      Associated protocol ID
+    </ResponseField>
+    
+    <ResponseField name="BankAccountId" type="integer">
+      Bank account where the payment was deposited
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="datetime">
+      Receipt creation timestamp (when payment was recorded)
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="datetime">
+      Receipt last update timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols/123' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+## Example Response
+
+```json
+{
+  "id": 123,
+  "status": "Liberado para pagamento",
+  "notes": "Protocol for Q1 2026 maintenance and support services. Client approved all line items on March 1st.",
+  "ServiceOrderId": null,
+  "SubscriptionId": 45,
+  "closedAt": null,
+  "createdAt": "2026-03-01T10:00:00.000Z",
+  "updatedAt": "2026-03-05T14:30:00.000Z",
+  "Protocol_registers": [
+    {
+      "id": 1,
+      "description": "Monthly server maintenance and monitoring",
+      "value": 500.00,
+      "type": "Serviço",
+      "ProtocolId": 123,
+      "createdAt": "2026-03-01T10:00:00.000Z",
+      "updatedAt": "2026-03-01T10:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "description": "Database optimization and tuning",
+      "value": 750.00,
+      "type": "Serviço",
+      "ProtocolId": 123,
+      "createdAt": "2026-03-01T10:15:00.000Z",
+      "updatedAt": "2026-03-01T10:15:00.000Z"
+    },
+    {
+      "id": 3,
+      "description": "Cloud storage costs (AWS S3)",
+      "value": 150.00,
+      "type": "Despesa",
+      "ProtocolId": 123,
+      "createdAt": "2026-03-01T10:20:00.000Z",
+      "updatedAt": "2026-03-01T10:20:00.000Z"
+    },
+    {
+      "id": 4,
+      "description": "SSL certificate renewal",
+      "value": 89.99,
+      "type": "Despesa",
+      "ProtocolId": 123,
+      "createdAt": "2026-03-01T10:25:00.000Z",
+      "updatedAt": "2026-03-01T10:25:00.000Z"
+    }
+  ],
+  "Protocol_products": [
+    {
+      "id": 1,
+      "charge_type": "Mensal",
+      "value": 299.99,
+      "ProductId": 10,
+      "ProtocolId": 123,
+      "LicenseId": 55,
+      "Product": {
+        "id": 10,
+        "description": "Premium Support Package - 24/7 coverage with 2-hour SLA",
+        "value": 299.99,
+        "coust": 100.00,
+        "generate_license": true,
+        "createdAt": "2026-01-15T08:00:00.000Z",
+        "updatedAt": "2026-02-20T12:00:00.000Z"
+      },
+      "createdAt": "2026-03-01T10:00:00.000Z",
+      "updatedAt": "2026-03-01T10:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "charge_type": "Único",
+      "value": 499.00,
+      "ProductId": 15,
+      "ProtocolId": 123,
+      "LicenseId": null,
+      "Product": {
+        "id": 15,
+        "description": "Security audit and penetration testing",
+        "value": 499.00,
+        "coust": 200.00,
+        "generate_license": false,
+        "createdAt": "2026-01-20T10:00:00.000Z",
+        "updatedAt": "2026-01-20T10:00:00.000Z"
+      },
+      "createdAt": "2026-03-01T10:30:00.000Z",
+      "updatedAt": "2026-03-01T10:30:00.000Z"
+    }
+  ],
+  "Receipts": [
+    {
+      "id": 1,
+      "method": "Pix",
+      "value": 1000.00,
+      "note": "First installment - Transaction ID: PIX20260302143045",
+      "ProtocolId": 123,
+      "BankAccountId": 1,
+      "createdAt": "2026-03-02T14:30:00.000Z",
+      "updatedAt": "2026-03-02T14:30:00.000Z"
+    },
+    {
+      "id": 2,
+      "method": "Transferência",
+      "value": 1288.99,
+      "note": "Second installment - Bank transfer completed",
+      "ProtocolId": 123,
+      "BankAccountId": 1,
+      "createdAt": "2026-03-15T09:15:00.000Z",
+      "updatedAt": "2026-03-15T09:15:00.000Z"
+    }
+  ]
+}
+```
+
+## Error Responses
+
+### Protocol Not Found
+
+If the specified protocol ID does not exist:
+
+```json
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Protocol not found"
+}
+```
+
+### Unauthorized
+
+If the JWT token is missing or invalid:
+
+```json
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "message": "Missing or invalid authentication token"
+}
+```
+
+## Notes
+
+- Each protocol is associated with either a Service Order OR a Subscription, but never both
+- The endpoint returns `null` for the association that doesn't exist
+- Protocol registers can be a mix of services (`Serviço`) and expenses (`Despesa`)
+- Multiple receipts can be associated with a single protocol, allowing for installment payments
+- The total value of receipts may be less than, equal to, or greater than the total protocol value
+- Products in the protocol may have different prices than their default values (discounts or custom pricing)
+- If a product has `generate_license: true`, a `LicenseId` will be created when the protocol product is added

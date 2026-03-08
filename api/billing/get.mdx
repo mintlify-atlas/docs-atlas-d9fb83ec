@@ -1,0 +1,254 @@
+---
+title: "Get Billing"
+api: "GET /api/billings/:id"
+description: "Retrieve detailed information about a specific billing including associated protocols, client, and service orders"
+---
+
+## Authentication
+
+This endpoint requires JWT authentication. Include the token in the Authorization header:
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique identifier of the billing to retrieve
+</ParamField>
+
+## Response
+
+Returns a detailed billing object with nested relationships including Client, BillingProtocols, Protocols, Service Orders, Projects, and Subscriptions.
+
+<ResponseField name="id" type="integer">
+  Unique identifier for the billing
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status of the billing. Possible values:
+  - `pendente` - Pending payment
+  - `pago` - Paid
+  - `cancelado` - Cancelled
+  
+  Default: `pendente`
+</ResponseField>
+
+<ResponseField name="total_value" type="decimal">
+  Total billing amount with 2 decimal places precision. Default: 0.00
+</ResponseField>
+
+<ResponseField name="due_date" type="date">
+  Payment due date in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="payment_date" type="date" optional>
+  Actual payment date in ISO 8601 format. Only set when status is `pago`
+</ResponseField>
+
+<ResponseField name="method" type="enum">
+  Payment method for this billing. Possible values:
+  - `Pix` - Instant payment
+  - `Boleto` - Bank slip
+  - `Cartão` - Credit/debit card
+  - `Transferência` - Bank transfer
+  - `Espécie` - Cash
+  
+  Default: `Boleto`
+</ResponseField>
+
+<ResponseField name="ClientId" type="integer">
+  Foreign key reference to the Client being billed
+</ResponseField>
+
+<ResponseField name="BankAccountId" type="integer" optional>
+  Foreign key reference to the BankAccount for receiving payment
+</ResponseField>
+
+<ResponseField name="createdAt" type="date">
+  Timestamp when the billing was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="date">
+  Timestamp when the billing was last updated
+</ResponseField>
+
+<ResponseField name="Client" type="object">
+  Associated client information
+  
+  <Expandable title="Client properties">
+    <ResponseField name="id" type="integer">
+      Client's unique identifier
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Client's full name or company name
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Client's email address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Client's phone number
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="BillingProtocols" type="array">
+  Array of billing protocols associated with this billing. Each protocol represents a billable item or service.
+  
+  <Expandable title="BillingProtocol properties">
+    <ResponseField name="id" type="integer">
+      Unique identifier for the billing protocol
+    </ResponseField>
+    
+    <ResponseField name="value" type="float">
+      Value of this specific protocol within the billing
+    </ResponseField>
+    
+    <ResponseField name="BillingId" type="integer">
+      Foreign key reference to the parent Billing
+    </ResponseField>
+    
+    <ResponseField name="ProtocolId" type="integer">
+      Foreign key reference to the Protocol
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="date">
+      Timestamp when the billing protocol was created
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="date">
+      Timestamp when the billing protocol was last updated
+    </ResponseField>
+    
+    <ResponseField name="Protocol" type="object">
+      Detailed protocol information including associated Service Orders and Subscriptions
+      
+      <Expandable title="Protocol properties">
+        <ResponseField name="id" type="integer">
+          Protocol's unique identifier
+        </ResponseField>
+        
+        <ResponseField name="ServiceOrder" type="object">
+          Associated service order with project details
+        </ResponseField>
+        
+        <ResponseField name="Subscription" type="object">
+          Associated subscription information
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.devefficiency.com/api/billings/42" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "id": 42,
+  "status": "pago",
+  "total_value": "3450.75",
+  "due_date": "2026-03-15T00:00:00.000Z",
+  "payment_date": "2026-03-10T14:30:00.000Z",
+  "method": "Pix",
+  "ClientId": 5,
+  "BankAccountId": 2,
+  "createdAt": "2026-02-15T10:00:00.000Z",
+  "updatedAt": "2026-03-10T14:30:00.000Z",
+  "Client": {
+    "id": 5,
+    "name": "Acme Corporation",
+    "email": "billing@acme.com",
+    "phone": "+55 11 98765-4321",
+    "document": "12.345.678/0001-90",
+    "address": "Av. Paulista, 1000",
+    "city": "São Paulo",
+    "state": "SP"
+  },
+  "BillingProtocols": [
+    {
+      "id": 101,
+      "value": 2000.50,
+      "BillingId": 42,
+      "ProtocolId": 78,
+      "createdAt": "2026-02-15T10:00:00.000Z",
+      "updatedAt": "2026-02-15T10:00:00.000Z",
+      "Protocol": {
+        "id": 78,
+        "protocol_number": "PROT-2026-078",
+        "description": "Web Development Services",
+        "ServiceOrder": {
+          "id": 45,
+          "title": "E-commerce Platform",
+          "Project": {
+            "id": 12,
+            "name": "Acme E-commerce",
+            "status": "active"
+          }
+        },
+        "Subscription": null
+      }
+    },
+    {
+      "id": 102,
+      "value": 1450.25,
+      "BillingId": 42,
+      "ProtocolId": 79,
+      "createdAt": "2026-02-15T10:00:00.000Z",
+      "updatedAt": "2026-02-15T10:00:00.000Z",
+      "Protocol": {
+        "id": 79,
+        "protocol_number": "PROT-2026-079",
+        "description": "Monthly Maintenance Subscription",
+        "ServiceOrder": null,
+        "Subscription": {
+          "id": 23,
+          "plan_name": "Premium Support",
+          "monthly_value": 1450.25,
+          "status": "active"
+        }
+      }
+    }
+  ]
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Not Found",
+  "message": "Billing with id 999 not found"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- This endpoint returns comprehensive billing information with all nested relationships
+- The response includes:
+  - Client details for invoice generation
+  - BillingProtocols array showing all billable items
+  - Each BillingProtocol includes the full Protocol with Service Orders and/or Subscriptions
+  - Service Orders include associated Projects for context
+- This detailed response is particularly useful for:
+  - Generating detailed invoices
+  - Understanding what services are included in the billing
+  - Tracking which projects and subscriptions are being billed
+  - Preparing data for PDF invoice generation (see `/api/billings/:id/pdf`)
+- The total_value represents the sum of all BillingProtocol values

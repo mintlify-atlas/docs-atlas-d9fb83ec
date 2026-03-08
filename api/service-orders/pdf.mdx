@@ -1,0 +1,199 @@
+---
+title: "Generate Service Order PDF"
+api: "GET /api/os/:id/pdf"
+description: "Generate and download a PDF document for a service order with complete protocol details"
+---
+
+## Authentication
+
+This endpoint does **NOT** require authentication. It can be accessed without a JWT token, making it suitable for sharing with clients or external stakeholders.
+
+## Path Parameters
+
+<ParamField path="id" type="number" required>
+  The unique identifier of the service order to generate a PDF for.
+</ParamField>
+
+## Response
+
+Returns a PDF file with the following headers:
+
+- `Content-Type: application/pdf`
+- `Content-Disposition: attachment; filename=os_{id}_{timestamp}.pdf`
+
+The PDF includes comprehensive information about the service order:
+
+- Service order details (subject, description, status)
+- Client information
+- Project information (if applicable)
+- Associated protocol data
+- Protocol registers (time/work entries)
+- Protocol products (items/services)
+- Receipts and payment information
+- Company configuration (logo, branding, contact details)
+
+## File Naming Convention
+
+The generated PDF follows this naming pattern:
+```
+os_{service_order_id}_{timestamp}.pdf
+```
+
+**Example:** `os_123_1709911235000.pdf`
+
+## Example Request
+
+```bash cURL
+curl -X GET "https://api.devefficiency.com/api/os/123/pdf" \
+  --output service_order_123.pdf
+```
+
+```bash Download with wget
+wget "https://api.devefficiency.com/api/os/123/pdf" -O service_order_123.pdf
+```
+
+```bash In Browser
+https://api.devefficiency.com/api/os/123/pdf
+```
+
+```javascript Fetch API
+fetch('https://api.devefficiency.com/api/os/123/pdf')
+  .then(response => response.blob())
+  .then(blob => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'service_order_123.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+```
+
+## Example Response
+
+```text 200 - Success
+Binary PDF content
+
+Headers:
+Content-Type: application/pdf
+Content-Disposition: attachment; filename=os_123_1709911235000.pdf
+```
+
+```json 404 - Not Found
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Service order not found"
+}
+```
+
+```json 500 - Server Error
+{
+  "statusCode": 500,
+  "error": "Internal Server Error",
+  "message": "Failed to generate PDF"
+}
+```
+
+## PDF Content Structure
+
+The generated PDF document includes the following sections:
+
+<Expandable title="Service Order Information">
+  - Service Order ID
+  - Subject
+  - Description
+  - Current Status
+  - Creation and update dates
+</Expandable>
+
+<Expandable title="Client Information">
+  - Client name and corporate name
+  - Tax document (CPF/CNPJ)
+  - Contact email
+  - Billing due day
+</Expandable>
+
+<Expandable title="Project Details">
+  - Project name
+  - Project type
+  - Project URL
+  - Associated server information
+</Expandable>
+
+<Expandable title="Protocol Data">
+  - Protocol ID and status
+  - Protocol registers (work entries with dates and descriptions)
+  - Protocol products (line items with descriptions, quantities, and prices)
+  - Receipts (payment records)
+  - Protocol notes
+</Expandable>
+
+<Expandable title="Company Configuration">
+  - Company logo (if configured)
+  - Company name and branding
+  - Contact information
+  - Custom header/footer content
+</Expandable>
+
+## PDF Generation Details
+
+The PDF is generated server-side using:
+
+- **Puppeteer**: Headless Chrome for HTML to PDF conversion
+- **EJS Template**: `src/views/budget.ejs` for layout and styling
+- **Configuration**: Company branding and logo from the Config table
+
+### Image Handling
+
+Images (such as company logos) are:
+- Read from the server's `tmp` directory
+- Converted to base64 encoding
+- Embedded directly in the PDF as data URIs
+- Supported formats: PNG, JPG, JPEG, GIF
+
+## Error Responses
+
+<ResponseField name="statusCode" type="number">
+  HTTP status code of the error.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error type description.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Detailed error message.
+</ResponseField>
+
+## Use Cases
+
+<Expandable title="Client Sharing">
+  Since this endpoint doesn't require authentication, you can safely share the PDF URL with clients for them to download quotes, invoices, or work summaries.
+</Expandable>
+
+<Expandable title="Automated Reporting">
+  Generate PDFs programmatically for batch reporting, archiving, or automated email delivery to clients.
+</Expandable>
+
+<Expandable title="Invoice Generation">
+  Use the PDF as an official invoice or quote document with all protocol products, receipts, and pricing information.
+</Expandable>
+
+<Expandable title="Record Keeping">
+  Download and archive PDFs for compliance, auditing, or historical record purposes.
+</Expandable>
+
+## Notes
+
+- This endpoint does NOT require authentication, unlike other service order endpoints
+- The PDF is generated in real-time and is not cached
+- Generation time may vary based on the complexity of the service order and amount of protocol data
+- The PDF filename includes a timestamp to ensure uniqueness
+- If the service order has no associated protocol or data, a minimal PDF will still be generated
+- Company branding (logos, colors) is pulled from the Config table
+- Images in the config must be stored in the server's `tmp` directory
+- The PDF template is located at `src/views/budget.ejs` and can be customized
+- Large service orders with many protocol entries may result in multi-page PDFs
+- The browser is launched in headless mode with specific flags for server compatibility

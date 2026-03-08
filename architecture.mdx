@@ -1,0 +1,1183 @@
+---
+title: 'System Architecture'
+description: 'Technical architecture and technology stack of DevEfficiency'
+icon: 'diagram-project'
+---
+
+DevEfficiency is built on a modern, high-performance stack optimized for handling complex business logic with real-time data synchronization.
+
+## Technology Stack
+
+<CardGroup cols={3}>
+  <Card title="Fastify" icon="gauge-high" iconType="duotone">
+    High-performance Node.js web framework with built-in TypeScript support
+  </Card>
+  
+  <Card title="MySQL" icon="database" iconType="duotone">
+    Relational database with Sequelize ORM for data persistence
+  </Card>
+  
+  <Card title="TypeScript" icon="code" iconType="duotone">
+    Type-safe development with full InferAttributes support
+  </Card>
+  
+  <Card title="Puppeteer" icon="file-pdf" iconType="duotone">
+    Headless Chrome for professional PDF generation
+  </Card>
+  
+  <Card title="Nodemailer" icon="envelope" iconType="duotone">
+    SMTP email delivery with HTML template support
+  </Card>
+  
+  <Card title="EJS" icon="file-code" iconType="duotone">
+    Template engine for dynamic PDF and email content
+  </Card>
+</CardGroup>
+
+## Application Structure
+
+### Entry Point & Server Setup
+
+The application initializes through a clean startup sequence:
+
+```typescript
+import app from './src/app'
+import jobs from './src/jobs'
+import syncModels from './src/sync'
+
+(async () => {
+    await syncModels()  // Sync database models
+    jobs()              // Start background workers
+    await app.listen({ 
+        host: '0.0.0.0', 
+        port: Number(process.env.PORT) || 3000 
+    })
+})()
+```
+
+From `index.ts:1-12`
+
+<Steps>
+  <Step title="Database Synchronization">
+    `syncModels()` ensures all Sequelize models are synchronized with the MySQL database schema.
+  </Step>
+  
+  <Step title="Background Jobs">
+    `jobs()` initializes workers for subscription management and check processing.
+  </Step>
+  
+  <Step title="Server Launch">
+    Fastify server starts listening on all interfaces at the configured port.
+  </Step>
+</Steps>
+
+### Fastify Application Configuration
+
+The core application is configured with security, rate limiting, and routing:
+
+```typescript
+import fastify, { FastifyInstance } from 'fastify'
+import helmet from '@fastify/helmet'
+import rateLimit from '@fastify/rate-limit'
+import fileStatic from '@fastify/static'
+
+const app: FastifyInstance = fastify()
+
+// Type augmentation for custom request properties
+declare module 'fastify' {
+    export interface FastifyRequest {
+        __user: any
+    }
+}
+
+// Initialize user object on all requests
+app.addHook('preHandler', (req, reply, done) => {
+    req.__user = {}
+    done()
+})
+
+// Security headers
+app.register(helmet, {
+    contentSecurityPolicy: false,
+    referrerPolicy: false,
+})
+
+// Static file serving
+app.register(fileStatic, {
+    root: path.join(__dirname, 'public'),
+    extensions: ['html'],
+})
+
+// Rate limiting: 100 requests per minute
+app.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+})
+
+// API routes under /api prefix
+app.register(routes, { prefix: 'api' })
+```
+
+From `src/app.ts:1-39`
+
+<Note>
+  The `__user` property is initialized on all requests and populated by the authentication middleware for protected routes.
+</Note>
+
+## Architectural Pattern
+
+DevEfficiency follows a layered MVC-style architecture:
+
+```
+┌─────────────────────────────────────────┐
+│            HTTP Layer                    │
+│  (Fastify + Routes + Middleware)         │
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
+│         Controller Layer                 │
+│  (Business Logic + Request Handling)     │
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
+│           Model Layer                    │
+│  (Sequelize Models + Associations)       │
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
+│          Database Layer                  │
+│         (MySQL + Hooks)                  │
+└─────────────────────────────────────────┘
+```
+
+### Routes Layer
+
+Centralized route definitions with middleware attachment:
+
+```typescript
+const routes: FastifyPluginCallback = (instance, opts, next) => {
+    // Public routes
+    instance.get('/', helloController.handler)
+    instance.post('/auth', authController.auth)
+    
+    // Protected routes with isAuthed middleware
+    instance.get('/clients', { preHandler: [isAuthed] }, clientController.index)
+    instance.post('/clients', { preHandler: [isAuthed] }, clientController.store)
+    
+    instance.get('/os', { preHandler: [isAuthed] }, serviceOrdersController.index)
+    instance.post('/os', { preHandler: [isAuthed] }, serviceOrdersController.store)
+    instance.get('/os/:id/pdf', serviceOrdersController.pdf)
+    
+    instance.get('/protocols', { preHandler: [isAuthed] }, protocolsController.index)
+    instance.get('/protocols/pdf', protocolsController.pdf)
+    
+    instance.get('/billings', { preHandler: [isAuthed] }, billingController.index)
+    instance.get('/billings/:id/pdf', billingController.pdf)
+    
+    next()
+}
+```
+
+From `src/routes.ts:36-181`
+
+<Info>
+  PDF generation endpoints do not require authentication, allowing them to be embedded in emails or accessed via unique URLs.
+</Info>
+
+### Controller Layer
+
+Controllers handle HTTP request/response logic and coordinate model operations:
+
+```typescript
+class serviceOrdersController {
+    static async index(req: serviceOrdersRequest, res: FastifyReply): Promise<FastifyReply> {
+        let { filter, ClientId, page = 1, limit = 10, status } = req.query as any
+        let where: any = {}
+        
+        if (ClientId) where.ClientId = ClientId
+        if (status) where.status = { [Op.in]: status.split(',') }
+        
+        const { count, rows } = await Service_order.findAndCountAll({
+            order: [['createdAt', 'DESC']],
+            limit: parseInt(limit),
+            offset: (page - 1) * limit,
+            where,
+            include: [{ model: Project, include: [Client] }, Client]
+        })
+        
+        return res.send({
+            data: rows,
+            total: count,
+            page: parseInt(page),
+            limit: parseInt(limit),
+        })
+    }
+    
+    static async store(req: serviceOrdersRequest, res: FastifyReply): Promise<FastifyReply> {
+        const { subject, description, ProjectId, ClientId } = req.body
+        let project = ProjectId ? await Project.findByPk(ProjectId) : undefined
+        
+        const os = await Service_order.create({
+            subject,
+            description,
+            ProjectId,
+            ClientId: project?.ClientId ?? ClientId ?? null,
+        })
+        
+        await os?.createProtocol()  // Automatically create protocol
+        return res.send(os)
+    }
+}
+```
+
+From `src/controllers/serviceOrdersController.ts:28-88`
+
+## Database Architecture
+
+### Database Connection
+
+Sequelize provides the ORM layer with connection pooling:
+
+```typescript
+import { Sequelize } from 'sequelize'
+
+const db = new Sequelize(
+    String(process.env.DB_NAME), 
+    String(process.env.DB_USER), 
+    String(process.env.DB_PASS), 
+    {
+        host: String(process.env.DB_HOST),
+        dialect: 'mysql',
+        pool: {
+            max: 5,
+            min: 0,
+            idle: 10000,
+        },
+        logging: console.log,
+    }
+)
+```
+
+From `src/db.ts:1-14`
+
+<Warning>
+  The connection pool is configured for 5 maximum connections. Adjust this based on your server's capacity and expected concurrent load.
+</Warning>
+
+## Data Model Relationships
+
+The database schema centers around Clients, with related entities for work tracking and billing:
+
+```
+Client
+  ├── Service_order (many)
+  │     ├── Protocol (one)
+  │     └── Project (one)
+  ├── Project (many)
+  │     ├── Service_order (many)
+  │     ├── Subproject (many)
+  │     └── Subscription (many)
+  ├── Subscription (many)
+  │     ├── Protocol (many)
+  │     └── License (many)
+  ├── Billing (many)
+  │     └── BillingProtocol (many)
+  │           └── Protocol (one)
+  ├── Contact (many)
+  ├── Address (many)
+  ├── Credential (many)
+  └── Server (many)
+
+Protocol
+  ├── Protocol_register (many)
+  ├── Protocol_product (many)
+  │     ├── Product (one)
+  │     └── License (one, optional)
+  └── Receipts (many)
+        └── BankAccount (one)
+
+Supplier
+  └── Payable (many)
+        ├── BankAccount (one)
+        └── CostCenter (one)
+```
+
+### Core Models
+
+<AccordionGroup>
+  <Accordion title="Client Model">
+    ```typescript
+    class Client extends Model<InferAttributes<Client>, InferCreationAttributes<Client>> {
+        declare id: CreationOptional<number>
+        declare name: string
+        declare corporate_name: CreationOptional<string>
+        declare document: CreationOptional<string>
+        declare email: CreationOptional<string>
+        declare due_day: CreationOptional<number>  // Default: 20
+        
+        declare createdAt: CreationOptional<Date>
+        declare updatedAt: CreationOptional<Date>
+    }
+    
+    Client.init({
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        name: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+        },
+        corporate_name: { type: DataTypes.STRING(255) },
+        document: { type: DataTypes.STRING(15) },
+        email: { type: DataTypes.STRING(128) },
+        due_day: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 20,
+        },
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    }, {
+        tableName: 'clients',
+        sequelize: db,
+    })
+    
+    // Associations
+    Client.hasMany(Service_order, { onDelete: 'RESTRICT' })
+    Client.hasMany(Project, { onDelete: 'RESTRICT' })
+    Client.hasMany(Subscription, { onDelete: 'RESTRICT' })
+    Client.hasMany(Billing, { onDelete: 'RESTRICT' })
+    Client.hasMany(Contact, { onDelete: 'RESTRICT' })
+    Client.hasMany(Address, { onDelete: 'RESTRICT' })
+    ```
+    
+    From `src/models/Client.ts:26-157`
+  </Accordion>
+  
+  <Accordion title="Service Order Model">
+    ```typescript
+    class Service_order extends Model<
+        InferAttributes<Service_order>, 
+        InferCreationAttributes<Service_order>
+    > {
+        declare id: CreationOptional<number>
+        declare subject: string
+        declare description: CreationOptional<string>
+        declare status: CreationOptional<
+            'Em avaliação' | 'Orçamento enviado' | 'Na fila' | 
+            'Em correções' | 'Pendente' | 'Finalizado' | 'Cancelado'
+        >
+        
+        declare ProjectId: ForeignKey<Project['id']>
+        declare ClientId: ForeignKey<Client['id']>
+        
+        declare createdAt: CreationOptional<Date>
+        declare updatedAt: CreationOptional<Date>
+    }
+    
+    Service_order.init({
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        subject: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+        },
+        description: { type: DataTypes.STRING },
+        status: {
+            type: DataTypes.ENUM,
+            values: [
+                'Em avaliação', 'Orçamento enviado', 'Na fila',
+                'Em correções', 'Pendente', 'Finalizado', 'Cancelado'
+            ],
+            defaultValue: 'Em avaliação',
+        },
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    }, {
+        tableName: 'service_orders',
+        sequelize: db,
+    })
+    
+    // Lifecycle hook
+    Service_order.beforeSave(serviceOrderHooks.beforeSave)
+    
+    // Associations
+    Service_order.hasOne(Protocol, { onDelete: 'RESTRICT' })
+    Protocol.belongsTo(Service_order)
+    ```
+    
+    From `src/models/Service_order.ts:21-94`
+  </Accordion>
+  
+  <Accordion title="Protocol Model">
+    ```typescript
+    class Protocol extends Model<InferAttributes<Protocol>, InferCreationAttributes<Protocol>> {
+        declare id: CreationOptional<number>
+        declare status: CreationOptional<
+            'Em aberto' | 'Liberado para pagamento' | 'Fechado' | 'Cancelado'
+        >
+        declare notes: CreationOptional<string>
+        declare closedAt: CreationOptional<Date>
+        
+        declare ServiceOrderId: ForeignKey<Service_order['id']>
+        declare SubscriptionId: ForeignKey<Subscription['id']>
+        
+        declare createdAt: CreationOptional<Date>
+        declare updatedAt: CreationOptional<Date>
+    }
+    
+    Protocol.init({
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        status: {
+            type: DataTypes.ENUM,
+            values: ['Em aberto', 'Liberado para pagamento', 'Fechado', 'Cancelado'],
+            defaultValue: 'Em aberto',
+        },
+        notes: { type: DataTypes.TEXT },
+        closedAt: DataTypes.DATE,
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    }, {
+        tableName: 'protocols',
+        sequelize: db,
+    })
+    
+    // Complex lifecycle hooks for billing automation
+    Protocol.beforeSave(protocolHooks.beforeSave)
+    Protocol.afterUpdate(protocolHooks.afterUpdate)
+    
+    // Associations
+    Protocol.hasMany(Protocol_register, { onDelete: 'RESTRICT' })
+    Protocol.hasMany(Protocol_product, { onDelete: 'RESTRICT' })
+    Protocol.hasMany(Receipts, { onDelete: 'RESTRICT' })
+    Protocol.hasMany(BillingProtocol, { onDelete: 'RESTRICT' })
+    ```
+    
+    From `src/models/Protocol.ts:26-121`
+  </Accordion>
+  
+  <Accordion title="Billing Model">
+    ```typescript
+    class Billing extends Model<InferAttributes<Billing>, InferCreationAttributes<Billing>> {
+        declare id: CreationOptional<number>
+        declare status: CreationOptional<string>  // pendente, pago, cancelado
+        declare total_value: CreationOptional<number>
+        declare due_date: CreationOptional<Date>
+        declare payment_date: CreationOptional<Date>
+        declare method: CreationOptional<
+            'Pix' | 'Boleto' | 'Cartão' | 'Transferência' | 'Espécie'
+        >
+        
+        declare ClientId: ForeignKey<Client['id']>
+        declare BankAccountId: ForeignKey<BankAccount['id']>
+        
+        declare createdAt: CreationOptional<Date>
+        declare updatedAt: CreationOptional<Date>
+    }
+    
+    Billing.init({
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        status: {
+            type: DataTypes.STRING(50),
+            defaultValue: 'pendente',
+        },
+        total_value: {
+            type: DataTypes.DECIMAL(10, 2),
+            defaultValue: 0.0,
+        },
+        due_date: { type: DataTypes.DATE },
+        payment_date: { type: DataTypes.DATE },
+        method: {
+            type: DataTypes.ENUM,
+            values: ['Pix', 'Boleto', 'Cartão', 'Transferência', 'Espécie'],
+            allowNull: false,
+            defaultValue: 'Boleto',
+        },
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    }, {
+        tableName: 'billings',
+        sequelize: db,
+    })
+    
+    // Payment processing hook
+    Billing.afterUpdate(billingHooks.afterUpdate)
+    
+    // Associations
+    Billing.hasMany(BillingProtocol, { onDelete: 'CASCADE' })
+    Billing.belongsTo(BankAccount)
+    ```
+    
+    From `src/models/Billing.ts:22-92`
+  </Accordion>
+  
+  <Accordion title="Project Model">
+    ```typescript
+    class Project extends Model<InferAttributes<Project>, InferCreationAttributes<Project>> {
+        declare id: CreationOptional<number>
+        declare name: string
+        declare url: CreationOptional<string>
+        declare fixed: CreationOptional<boolean>
+        declare type: CreationOptional<
+            'API' | 'Bot' | 'WebSite' | 'Automação' | 'Crawler' | 'Outros'
+        >
+        
+        declare ClientId: ForeignKey<Client['id']>
+        declare ServerId: ForeignKey<Server['id']>
+    }
+    
+    Project.init({
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        name: {
+            type: DataTypes.STRING(128),
+            allowNull: false,
+        },
+        url: { type: DataTypes.STRING },
+        fixed: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+        },
+        type: {
+            type: DataTypes.ENUM,
+            values: ['API', 'Bot', 'WebSite', 'Automação', 'Crawler', 'Outros'],
+        },
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    }, {
+        tableName: 'projects',
+        sequelize: db,
+    })
+    
+    // Associations
+    Project.hasMany(Subproject, { onDelete: 'RESTRICT' })
+    Project.hasMany(Service_order, { onDelete: 'RESTRICT' })
+    Project.hasMany(Check, { onDelete: 'RESTRICT' })
+    Project.hasMany(Subscription, { onDelete: 'RESTRICT' })
+    ```
+    
+    From `src/models/Project.ts:23-108`
+  </Accordion>
+  
+  <Accordion title="Subscription Model">
+    ```typescript
+    class Subscription extends Model<
+        InferAttributes<Subscription>, 
+        InferCreationAttributes<Subscription>
+    > {
+        declare id: CreationOptional<number>
+        declare name: CreationOptional<number>
+        declare status: CreationOptional<'Pendente' | 'Pago' | 'Não pago' | 'Cancelado'>
+        declare dueAt: Date
+        
+        declare ClientId: ForeignKey<Client['id']>
+        declare ProjectId: ForeignKey<Project['id']>
+        
+        declare createdAt: CreationOptional<Date>
+        declare updatedAt: CreationOptional<Date>
+    }
+    
+    Subscription.init({
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        name: { type: DataTypes.STRING(55) },
+        status: {
+            type: DataTypes.ENUM,
+            values: ['Pendente', 'Pago', 'Não pago', 'Cancelado'],
+            defaultValue: 'Pago',
+        },
+        dueAt: {
+            type: DataTypes.DATE,
+            allowNull: false,
+        },
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    }, {
+        tableName: 'subscriptions',
+        sequelize: db,
+    })
+    
+    // Associations
+    Subscription.hasMany(License, { onDelete: 'RESTRICT' })
+    ```
+    
+    From `src/models/Subscription.ts:19-69`
+  </Accordion>
+  
+  <Accordion title="Payable Model">
+    ```typescript
+    class Payable extends Model<InferAttributes<Payable>, InferCreationAttributes<Payable>> {
+        declare id: CreationOptional<number>
+        declare description: string
+        declare value: number
+        declare dueDate: Date
+        declare paymentDate: CreationOptional<Date>
+        declare status: CreationOptional<'pendente' | 'pago' | 'atrasado' | 'cancelado'>
+        
+        declare SupplierId: ForeignKey<Supplier['id']>
+        declare BankAccountId: ForeignKey<BankAccount['id']>
+        declare CostCenterId: ForeignKey<CostCenter['id']>
+    }
+    
+    Payable.init({
+        id: {
+            type: DataTypes.INTEGER.UNSIGNED,
+            autoIncrement: true,
+            primaryKey: true,
+        },
+        description: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
+        value: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: false,
+        },
+        dueDate: {
+            type: DataTypes.DATE,
+            allowNull: false,
+        },
+        paymentDate: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
+        status: {
+            type: DataTypes.ENUM('pendente', 'pago', 'atrasado', 'cancelado'),
+            defaultValue: 'pendente',
+            allowNull: false,
+        },
+        createdAt: DataTypes.DATE,
+        updatedAt: DataTypes.DATE,
+    }, {
+        tableName: 'payables',
+        sequelize: db,
+    })
+    
+    // Associations
+    Payable.belongsTo(Supplier)
+    Payable.belongsTo(BankAccount)
+    Payable.belongsTo(CostCenter)
+    
+    // Hooks for financial tracking
+    Payable.afterCreate(payableHooks.afterCreate)
+    Payable.afterUpdate(payableHooks.afterUpdate)
+    Payable.afterDestroy(payableHooks.afterDestroy)
+    ```
+    
+    From `src/models/Payable.ts:14-81`
+  </Accordion>
+</AccordionGroup>
+
+## Model Hooks & Business Logic
+
+Sequelize hooks implement complex business logic at the database layer, ensuring data consistency and automating workflows.
+
+### Protocol Hooks
+
+Protocol hooks manage the most complex business logic in the system:
+
+<Tabs>
+  <Tab title="beforeSave Hook">
+    Executed before any protocol save operation:
+    
+    **Validation:**
+    ```typescript
+    if (protocol.status == 'Fechado') {
+        if (total_receipt < total_cost)
+            throw new Error('Não é possivel finalizar, protocolo com recebimentos pendentes.')
+    }
+    
+    if (protocol.status == 'Cancelado') {
+        if (total_receipt > 0) 
+            throw new Error('Não é possivel finalizar, protocolo com recebimentos.')
+    }
+    ```
+    
+    **Subscription Creation:**
+    ```typescript
+    // When closing a protocol with recurring products
+    if (charge_type == 'Mensal')
+        dueAt = moment().set('date', client?.due_day || 1).add(1, 'month').toDate()
+    if (charge_type == 'Anual')
+        dueAt = moment().set('date', client?.due_day || 1).add(1, 'year').toDate()
+    
+    const subscription = await Subscription.create({
+        dueAt,
+        ClientId: service_order.ClientId,
+        ProjectId: service_order.ProjectId,
+        status: 'Pago',
+    })
+    
+    // Create next protocol with same products
+    const newProtocol = await subscription.createProtocol()
+    for (let protocol_product of protocol_products) {
+        await newProtocol?.createProtocol_product({
+            ProductId: protocol_product.ProductId,
+            value: protocol_product.value,
+            charge_type: protocol_product.charge_type,
+        })
+    }
+    ```
+    
+    From `src/hooks/protocolHooks.ts:12-126`
+  </Tab>
+  
+  <Tab title="afterUpdate Hook">
+    Triggered after protocol updates to manage billing:
+    
+    **When status changes to "Liberado para pagamento":**
+    ```typescript
+    // Find or create pending billing for client
+    let billing = await Billing.findOne({
+        where: { ClientId: client.id, status: 'pendente' },
+        transaction
+    })
+    
+    if (!billing) {
+        const nextDueDate = moment().set('date', client?.due_day || 1)
+        if (nextDueDate.isBefore(moment(), 'day')) {
+            nextDueDate.add(1, 'month')
+        }
+        
+        billing = await Billing.create(
+            { ClientId: client.id, status: 'pendente', due_date: nextDueDate },
+            { transaction }
+        )
+    }
+    
+    // Calculate protocol value and add to billing
+    const value = protocol_products.reduce((sum, v) => sum + v.value, 0) +
+                  protocol_registers.reduce((sum, v) => sum + v.value, 0) -
+                  receipts.reduce((sum, v) => sum + v.value, 0)
+    
+    await BillingProtocol.create(
+        { BillingId: billing.id, ProtocolId: protocol.id, value },
+        { transaction }
+    )
+    
+    // Update billing total
+    const billingProtocols = await billing.getBillingProtocols({ transaction })
+    const total_value = billingProtocols.reduce((sum, v) => sum + v.value, 0)
+    await billing.update({ total_value }, { transaction })
+    ```
+    
+    **When status changes from "Liberado para pagamento":**
+    ```typescript
+    // Remove from pending billing
+    const billingProtocol = await BillingProtocol.findOne({
+        where: { ProtocolId: protocol.id },
+        include: [{ model: Billing, where: { status: 'pendente' } }],
+        transaction
+    })
+    
+    if (billingProtocol) {
+        const billing = await Billing.findByPk(billingProtocol.BillingId, { transaction })
+        await billingProtocol.destroy({ transaction })
+        
+        // Recalculate billing total
+        const billingProtocols = await billing.getBillingProtocols({ transaction })
+        const total_value = billingProtocols.reduce((sum, v) => sum + v.value, 0)
+        await billing.update({ total_value }, { transaction })
+    }
+    ```
+    
+    From `src/hooks/protocolHooks.ts:133-203`
+  </Tab>
+</Tabs>
+
+### Billing Hooks
+
+Billing hooks manage payment processing and protocol closure:
+
+```typescript
+static async afterUpdate(billing: Billing, options: InstanceUpdateOptions) {
+    if (billing.status === 'pago' && billing.previous('status') !== 'pago') {
+        const billingProtocols = await billing.getBillingProtocols({ transaction })
+        
+        for (const billingProtocol of billingProtocols) {
+            const protocol = await Protocol.findByPk(billingProtocol.ProtocolId)
+            
+            // Calculate remaining protocol value
+            const protocolValue = 
+                protocol_products.reduce((sum, v) => sum + v.value, 0) +
+                protocol_registers.reduce((sum, v) => sum + v.value, 0) -
+                receipts.reduce((sum, v) => sum + v.value, 0)
+            
+            if (protocolValue <= 0) {
+                // Protocol fully paid - close it
+                await protocol.update({ status: 'Fechado' }, { transaction })
+                
+                if (protocol.ServiceOrderId) {
+                    const serviceOrder = await Service_order.findByPk(protocol.ServiceOrderId)
+                    await serviceOrder.update({ status: 'Finalizado' }, { transaction })
+                }
+                
+                if (protocol.SubscriptionId) {
+                    const subscription = await Subscription.findByPk(protocol.SubscriptionId)
+                    await subscription.update({ status: 'Pago' }, { transaction })
+                }
+            } else {
+                // Partial payment - create new billing for remainder
+                let currentBilling = await Billing.findOne({
+                    where: { ClientId: billing.ClientId, status: 'pendente' },
+                    transaction
+                })
+                
+                if (!currentBilling) {
+                    currentBilling = await Billing.create(
+                        { ClientId: billing.ClientId, status: 'pendente', due_date: nextDueDate },
+                        { transaction }
+                    )
+                }
+                
+                await BillingProtocol.create(
+                    {
+                        BillingId: currentBilling.id,
+                        ProtocolId: protocol.id,
+                        value: billingProtocol.value,
+                    },
+                    { transaction }
+                )
+            }
+        }
+    }
+}
+```
+
+From `src/hooks/billingHooks.ts:13-93`
+
+<Tip>
+  All hook operations use database transactions to ensure data consistency. If any part of the hook fails, all changes are rolled back.
+</Tip>
+
+## Background Workers
+
+Background jobs handle time-based automation:
+
+```typescript
+import checksWorker from './workers/checksWorker'
+import subscriptionsWorker from './workers/subscriptionsWorker'
+
+export default function () {
+    checksWorker.setup()
+    subscriptionsWorker.setup()
+}
+```
+
+From `src/jobs.ts:1-7`
+
+### Subscriptions Worker
+
+Runs every 10 minutes (600,000 ms) to manage subscription billing lifecycle:
+
+```typescript
+export default new class subscriptionsWorker {
+    public setup(): void {
+        this.loop()
+        setInterval(() => {
+            this.loop()
+        }, 600000)  // 10 minutes
+    }
+    
+    private async loop(): Promise<void> {
+        const protocols = await Protocol.findAll({
+            where: {
+                status: ['Em aberto', 'Liberado para pagamento'],
+                SubscriptionId: { [Op.gt]: 1 }
+            },
+            include: [Subscription]
+        })
+        
+        for (let protocol of protocols) {
+            if (protocol.Subscription.status == 'Cancelado') continue
+            
+            // Release for payment 7 days before due date
+            if (protocol.status == 'Em aberto') {
+                if (moment(protocol.Subscription.dueAt).diff(moment(), 'days') > 7) 
+                    continue
+                
+                protocol.status = 'Liberado para pagamento'
+                protocol.Subscription.status = 'Pendente'
+                
+                await protocol.save()
+                await protocol.Subscription.save()
+            }
+            
+            // Mark unpaid 3 days after due date
+            if (protocol.status == 'Liberado para pagamento') {
+                if (moment().diff(moment(protocol.Subscription.dueAt).add(3, 'days'), 'days') < 0) 
+                    continue
+                
+                protocol.Subscription.status = 'Não pago'
+                await protocol.Subscription.save()
+            }
+        }
+    }
+}()
+```
+
+From `src/workers/subscriptionsWorker.ts:6-47`
+
+## PDF Generation Pipeline
+
+Professional PDF generation uses Puppeteer with headless Chrome:
+
+<Steps>
+  <Step title="Load Data">
+    Fetch complete object graph with all associations:
+    
+    ```typescript
+    const billing = await Billing.findByPk(id, {
+        include: [
+            Client,
+            {
+                model: BillingProtocol,
+                include: [{
+                    model: Protocol,
+                    include: [
+                        { model: Protocol_product, include: [Product] },
+                        Protocol_register,
+                        Receipts,
+                        { model: Service_order, include: [Project] },
+                        Subscription,
+                    ]
+                }]
+            }
+        ]
+    })
+    ```
+  </Step>
+  
+  <Step title="Load Configuration">
+    Fetch branding configuration with logo conversion:
+    
+    ```typescript
+    const config = await Config.findAll({})
+    const configMap: { [key: string]: string | null } = {}
+    
+    config.forEach((cfg) => {
+        if (cfg.upload && ['png', 'jpg', 'jpeg', 'gif'].includes(extension)) {
+            const file = fs.readFileSync(path.join(process.cwd(), 'tmp', cfg.value))
+            const fileBase64 = Buffer.from(file).toString('base64')
+            configMap[cfg.type] = `data:image/${extension};base64,${fileBase64}`
+        } else {
+            configMap[cfg.type] = cfg.value
+        }
+    })
+    ```
+  </Step>
+  
+  <Step title="Render EJS Template">
+    Compile template with data:
+    
+    ```typescript
+    const template = fs.readFileSync(
+        path.resolve('src', 'views', 'billing.ejs'), 
+        'utf-8'
+    )
+    const html = ejs.render(template, { billing, client, configMap })
+    ```
+  </Step>
+  
+  <Step title="Generate PDF with Puppeteer">
+    Launch headless Chrome and render:
+    
+    ```typescript
+    const browser = await puppeteer.launch({
+        headless: 'new',
+        executablePath: '/usr/bin/google-chrome',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+    })
+    
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    await page.emulateMediaType('screen')
+    const pdf = await page.pdf()
+    
+    await page.close()
+    await browser.close()
+    ```
+  </Step>
+  
+  <Step title="Return PDF">
+    Send as downloadable attachment:
+    
+    ```typescript
+    res.header('Content-Type', 'application/pdf')
+    res.header('Content-Disposition', 
+        `attachment; filename=billing_${client.name}_${Date.now()}.pdf`)
+    return res.send(pdf)
+    ```
+  </Step>
+</Steps>
+
+From `src/controllers/billingController.ts:129-200`
+
+<Warning>
+  Puppeteer requires Chrome/Chromium to be installed on the server. The `executablePath` must point to the correct binary location.
+</Warning>
+
+## Email System Architecture
+
+Nodemailer provides SMTP-based email delivery:
+
+```typescript
+import nodemialer from 'nodemailer'
+
+const transporter = nodemialer.createTransport({
+    host: process.env.EMAIL_HOST,
+    secure: false,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+})
+
+export default function sendMail(
+    to: string[] | string, 
+    subject: string, 
+    html: string
+): void {
+    if (!Array.isArray(to)) to = to.split(',')
+    
+    // Add CC recipient from environment
+    to.push(process.env.EMAIL_CC as string)
+    to = to.join(',')
+    
+    const from = `${process.env.EMAIL_NAME} <${process.env.EMAIL_FROM}>`
+    
+    transporter.sendMail(
+        { from, to, subject, html },
+        function (err, info) {
+            if (err) {
+                console.log(err)
+            } else {
+                console.log('[+] Email enviado: ' + info.response)
+            }
+        }
+    )
+}
+```
+
+From `src/utils/sendEmail.ts:1-35`
+
+<Info>
+  All emails automatically CC the address configured in `EMAIL_CC` for audit trail purposes.
+</Info>
+
+## Environment Configuration
+
+The application requires the following environment variables:
+
+```bash
+# Database
+DB_NAME=devefficiency
+DB_USER=root
+DB_PASS=password
+DB_HOST=localhost
+
+# Server
+PORT=3000
+
+# Authentication
+SECRET=your-jwt-secret-key
+
+# Email
+EMAIL_HOST=smtp.example.com
+EMAIL_USER=noreply@example.com
+EMAIL_PASS=email-password
+EMAIL_FROM=noreply@example.com
+EMAIL_NAME=DevEfficiency
+EMAIL_CC=admin@example.com
+```
+
+## Performance Considerations
+
+<CardGroup cols={2}>
+  <Card title="Database Connection Pool" icon="database">
+    Max 5 concurrent connections with 10-second idle timeout ensures efficient resource usage.
+  </Card>
+  
+  <Card title="Rate Limiting" icon="shield">
+    100 requests per minute per IP prevents abuse while allowing normal usage.
+  </Card>
+  
+  <Card title="PDF Generation" icon="gauge">
+    Puppeteer instances are created per-request and immediately closed to prevent memory leaks.
+  </Card>
+  
+  <Card title="Background Workers" icon="clock">
+    10-minute intervals for subscription processing balance responsiveness with server load.
+  </Card>
+</CardGroup>
+
+## Security Features
+
+<AccordionGroup>
+  <Accordion title="JWT Token Authentication">
+    All protected routes require valid JWT tokens with 1-hour expiration. Tokens are verified on each request:
+    
+    ```typescript
+    const decoded = jsonwebtoken.verify(
+        authorization?.replace('bearer ', '').replace('Bearer ', ''),
+        process.env.SECRET
+    )
+    req.__user = decoded
+    ```
+    
+    From `src/middlewares/isAuthed.ts:21-26`
+  </Accordion>
+  
+  <Accordion title="Password Hashing">
+    User passwords are hashed with bcrypt before storage:
+    
+    ```typescript
+    if (!bcrypt.compareSync(password, user.password))
+        return res.status(401).send({ error: true, message: 'Usuário ou senha invalidos.' })
+    ```
+    
+    From `src/controllers/authController.ts:23-24`
+  </Accordion>
+  
+  <Accordion title="Helmet Security Headers">
+    Helmet provides essential security headers:
+    
+    ```typescript
+    app.register(helmet, {
+        contentSecurityPolicy: false,  // Disabled for PDF generation
+        referrerPolicy: false,
+    })
+    ```
+    
+    From `src/app.ts:23-26`
+  </Accordion>
+  
+  <Accordion title="Database Input Sanitization">
+    Sequelize automatically parameterizes queries, preventing SQL injection:
+    
+    ```typescript
+    await Service_order.findAndCountAll({
+        where: { ClientId }  // Safely parameterized
+    })
+    ```
+  </Accordion>
+</AccordionGroup>

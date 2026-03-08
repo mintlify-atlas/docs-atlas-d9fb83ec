@@ -1,0 +1,167 @@
+---
+title: "Update Billing"
+api: "PUT /api/billings/:id"
+description: "Update billing information including due date, payment method, and bank account"
+---
+
+## Authentication
+
+This endpoint requires JWT authentication. Include the token in the Authorization header:
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique identifier of the billing to update
+</ParamField>
+
+## Request Body
+
+<ParamField body="due_date" type="date" optional>
+  New payment due date. Can be provided in various ISO 8601 formats. The date will be converted to a proper Date object using moment.js
+</ParamField>
+
+<ParamField body="method" type="enum" optional>
+  Payment method for this billing. Possible values:
+  - `Pix` - Instant payment
+  - `Boleto` - Bank slip
+  - `Cartão` - Credit/debit card
+  - `Transferência` - Bank transfer
+  - `Espécie` - Cash
+</ParamField>
+
+<ParamField body="BankAccountId" type="integer" optional>
+  The ID of the bank account that will receive the payment
+</ParamField>
+
+## Response
+
+Returns the updated billing object.
+
+<ResponseField name="id" type="integer">
+  Unique identifier for the billing
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status of the billing (not updated by this endpoint)
+</ResponseField>
+
+<ResponseField name="total_value" type="decimal">
+  Total billing amount (not updated by this endpoint)
+</ResponseField>
+
+<ResponseField name="due_date" type="date">
+  Updated payment due date in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="payment_date" type="date" optional>
+  Actual payment date (not updated by this endpoint)
+</ResponseField>
+
+<ResponseField name="method" type="enum">
+  Updated payment method for this billing
+</ResponseField>
+
+<ResponseField name="ClientId" type="integer">
+  Foreign key reference to the Client (not updated by this endpoint)
+</ResponseField>
+
+<ResponseField name="BankAccountId" type="integer" optional>
+  Updated foreign key reference to the BankAccount
+</ResponseField>
+
+<ResponseField name="createdAt" type="date">
+  Timestamp when the billing was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="date">
+  Timestamp when the billing was last updated (reflects this update)
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X PUT "https://api.devefficiency.com/api/billings/42" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "due_date": "2026-04-30",
+    "method": "Pix",
+    "BankAccountId": 3
+  }'
+```
+
+```bash Update Due Date Only
+curl -X PUT "https://api.devefficiency.com/api/billings/42" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "due_date": "2026-05-15T23:59:59.000Z"
+  }'
+```
+
+```bash Change Payment Method
+curl -X PUT "https://api.devefficiency.com/api/billings/42" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "method": "Cartão"
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+{
+  "id": 42,
+  "status": "pendente",
+  "total_value": "3450.75",
+  "due_date": "2026-04-30T00:00:00.000Z",
+  "payment_date": null,
+  "method": "Pix",
+  "ClientId": 5,
+  "BankAccountId": 3,
+  "createdAt": "2026-02-15T10:00:00.000Z",
+  "updatedAt": "2026-03-08T14:22:30.000Z"
+}
+```
+
+```json 404 Not Found
+{
+  "message": "Cobrança não encontrada"
+}
+```
+
+```json 400 Bad Request
+{
+  "error": "Validation Error",
+  "message": "Invalid payment method. Must be one of: Pix, Boleto, Cartão, Transferência, Espécie"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- This endpoint only allows updating three specific fields:
+  - `due_date` - The payment deadline
+  - `method` - The payment method
+  - `BankAccountId` - The receiving bank account
+- Other billing fields like `status`, `total_value`, `payment_date`, and `ClientId` cannot be updated through this endpoint
+- The `due_date` is processed through moment.js (`moment(due_date).toDate()`) to ensure proper date handling
+- Payment method changes are validated against the enum values defined in the Billing model
+- After updating, the `billingHooks.afterUpdate` hook is automatically triggered, which may perform additional actions
+- Common use cases:
+  - Extending a payment deadline for a client
+  - Changing the payment method based on client preference
+  - Updating the receiving bank account for accounting purposes
+- The `updatedAt` timestamp is automatically updated to reflect when the changes were made
+- If the billing doesn't exist, a 404 error is returned with a Portuguese message: "Cobrança não encontrada"

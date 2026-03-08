@@ -1,0 +1,238 @@
+---
+title: "Update Protocol"
+api: "PUT /api/protocols/:id"
+description: "Update the status and notes of an existing protocol"
+---
+
+## Authentication
+
+This endpoint requires JWT authentication. Include the bearer token in the Authorization header.
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  Unique identifier of the protocol to update
+</ParamField>
+
+## Request Body
+
+<ParamField body="status" type="string">
+  New protocol status. Must be one of the following values:
+  - `Em aberto` - Open protocol, actively being worked on
+  - `Liberado para pagamento` - Released for payment, ready for billing
+  - `Fechado` - Closed, protocol is complete
+  - `Cancelado` - Cancelled, protocol was terminated
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Additional notes or comments about the protocol. Can include approval information, client feedback, or internal notes
+</ParamField>
+
+## Response
+
+Returns the updated protocol object with modified fields.
+
+<ResponseField name="id" type="integer">
+  Unique protocol identifier
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Updated protocol status
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  Updated notes field
+</ResponseField>
+
+<ResponseField name="ServiceOrderId" type="integer | null">
+  Associated service order ID (unchanged by this endpoint)
+</ResponseField>
+
+<ResponseField name="SubscriptionId" type="integer | null">
+  Associated subscription ID (unchanged by this endpoint)
+</ResponseField>
+
+<ResponseField name="closedAt" type="datetime | null">
+  Timestamp when the protocol was closed. Automatically set when status changes to `Fechado`
+</ResponseField>
+
+<ResponseField name="createdAt" type="datetime">
+  Protocol creation timestamp (unchanged)
+</ResponseField>
+
+<ResponseField name="updatedAt" type="datetime">
+  Last update timestamp (automatically updated to current time)
+</ResponseField>
+
+## Example Request
+
+```bash
+curl --request PUT \
+  --url 'https://api.devefficiency.com/api/protocols/123' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "status": "Liberado para pagamento",
+    "notes": "Client approved all items. Ready for invoicing."
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "id": 123,
+  "status": "Liberado para pagamento",
+  "notes": "Client approved all items. Ready for invoicing.",
+  "ServiceOrderId": null,
+  "SubscriptionId": 45,
+  "closedAt": null,
+  "createdAt": "2026-03-01T10:00:00.000Z",
+  "updatedAt": "2026-03-08T15:45:30.000Z"
+}
+```
+
+## Update Status Only
+
+You can update just the status without modifying notes:
+
+```bash
+curl --request PUT \
+  --url 'https://api.devefficiency.com/api/protocols/123' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "status": "Fechado"
+  }'
+```
+
+## Update Notes Only
+
+You can update just the notes without modifying status:
+
+```bash
+curl --request PUT \
+  --url 'https://api.devefficiency.com/api/protocols/123' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "notes": "Added additional context about payment terms discussed with client."
+  }'
+```
+
+## Close Protocol
+
+When changing status to "Fechado", the `closedAt` field is automatically set:
+
+```bash
+curl --request PUT \
+  --url 'https://api.devefficiency.com/api/protocols/123' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "status": "Fechado",
+    "notes": "All services completed and payment received in full."
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": 123,
+  "status": "Fechado",
+  "notes": "All services completed and payment received in full.",
+  "ServiceOrderId": null,
+  "SubscriptionId": 45,
+  "closedAt": "2026-03-08T15:45:30.000Z",
+  "createdAt": "2026-03-01T10:00:00.000Z",
+  "updatedAt": "2026-03-08T15:45:30.000Z"
+}
+```
+
+## Cancel Protocol
+
+When cancelling a protocol:
+
+```bash
+curl --request PUT \
+  --url 'https://api.devefficiency.com/api/protocols/123' \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "status": "Cancelado",
+    "notes": "Client requested cancellation due to budget constraints."
+  }'
+```
+
+## Error Responses
+
+### Protocol Not Found
+
+If the specified protocol ID does not exist:
+
+```json
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Protocolo não existe."
+}
+```
+
+### Invalid Status Value
+
+If an invalid status value is provided:
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Invalid status value. Must be one of: Em aberto, Liberado para pagamento, Fechado, Cancelado"
+}
+```
+
+### Unauthorized
+
+If the JWT token is missing or invalid:
+
+```json
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "message": "Missing or invalid authentication token"
+}
+```
+
+### Validation Error
+
+If the request body is malformed:
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Invalid request body"
+}
+```
+
+## Status Workflow
+
+Typical protocol status progression:
+
+1. **Em aberto** - Initial state when protocol is created. Work is in progress.
+2. **Liberado para pagamento** - All work is complete and approved. Ready for payment/invoicing.
+3. **Fechado** - Payment received and protocol is finalized. The `closedAt` timestamp is automatically recorded.
+
+Alternative paths:
+- **Cancelado** - Can be set from any state if the protocol needs to be cancelled.
+- Protocols can move between states as needed (e.g., from "Liberado para pagamento" back to "Em aberto" if changes are required).
+
+## Notes
+
+- Only `status` and `notes` fields can be updated through this endpoint
+- Other protocol relationships (products, registers, receipts) must be updated through their respective endpoints
+- The `updatedAt` timestamp is automatically updated on every successful update
+- The `closedAt` field is automatically managed by backend hooks when the status changes
+- Both `status` and `notes` are optional in the request body - you can update either or both
+- Empty strings are valid values for the `notes` field
+- Protocol hooks may trigger additional actions based on status changes (e.g., sending notifications, updating related records)

@@ -1,0 +1,164 @@
+---
+title: 'Verify Token'
+api: 'GET /auth/verify'
+description: 'Verify that an access token is valid and not expired'
+---
+
+## Description
+
+Verifies that the provided bearer token is valid, properly signed, and not expired. This endpoint is useful for checking authentication status before performing sensitive operations.
+
+<Note>
+  This endpoint requires a valid bearer token in the Authorization header. It will fail if the token is missing, invalid, or expired.
+</Note>
+
+## Authentication
+
+This endpoint requires authentication via the `Authorization` header.
+
+**Required Header:**
+
+```
+Authorization: Bearer <your_access_token>
+```
+
+The token is verified using the `isAuthed` middleware (see `middlewares/isAuthed.ts`) which:
+
+1. Extracts the token from the Authorization header
+2. Removes the "bearer " or "Bearer " prefix
+3. Verifies the JWT signature using the server's secret key
+4. Checks that the token has not expired
+5. Attaches the decoded user object to the request
+
+## Request
+
+No request body is required. Authentication is handled via the Authorization header.
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates successful token verification, always returns `true` when the token is valid
+</ResponseField>
+
+## Error Responses
+
+If the token is invalid or expired, the middleware will throw an error before reaching the controller.
+
+### Status Codes
+
+- `200` - Token is valid
+- `401` - Token is invalid, expired, or missing
+- `500` - Server error during token verification
+
+## Example Request
+
+```bash
+curl -X GET https://api.devefficiency.com/auth/verify \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjp7ImlkIjoxLCJ1c2VybmFtZSI6ImpvaG4uZG9lIn0sImlhdCI6MTcwNTMxNTgwMCwiZXhwIjoxNzA1MzE5NDAwfQ.abc123xyz789"
+```
+
+## Example Response
+
+### Success Response (200)
+
+```json
+{
+  "success": true
+}
+```
+
+### Error Response (401)
+
+```json
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "message": "Invalid token"
+}
+```
+
+<Warning>
+  Token verification errors are typically thrown by the JWT library (jsonwebtoken) and handled by Fastify's error handler. Common errors include "jwt expired", "invalid signature", and "jwt malformed".
+</Warning>
+
+## Use Cases
+
+### 1. Check Authentication Status
+
+Before navigating to a protected page or feature, verify the stored token is still valid:
+
+```javascript
+const checkAuth = async (token) => {
+  try {
+    const response = await fetch('https://api.devefficiency.com/auth/verify', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+};
+```
+
+### 2. Periodic Token Validation
+
+Validate tokens periodically in long-running applications:
+
+```javascript
+setInterval(async () => {
+  const isValid = await checkAuth(currentToken);
+  if (!isValid) {
+    // Trigger re-authentication flow
+    redirectToLogin();
+  }
+}, 5 * 60 * 1000); // Check every 5 minutes
+```
+
+### 3. Preflight Checks
+
+Verify authentication before making batch operations:
+
+```javascript
+const performBatchOperation = async (operations) => {
+  // Verify token first
+  const verified = await fetch('/auth/verify', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  
+  if (!verified.ok) {
+    throw new Error('Authentication expired');
+  }
+  
+  // Proceed with operations
+  return Promise.all(operations);
+};
+```
+
+## Implementation Details
+
+The endpoint is defined in `routes.ts:41` with the `isAuthed` preHandler middleware:
+
+```typescript
+instance.get('/auth/verify', { preHandler: [isAuthed] }, authController.verify)
+```
+
+The controller method (see `authController.ts:39-41`) simply returns success, as all validation is performed by the middleware:
+
+```typescript
+static verify(req: authRequest, res: FastifyReply): FastifyReply {
+    return res.send({ success: true })
+}
+```
+
+The actual verification logic is in `isAuthed` middleware (see `middlewares/isAuthed.ts:18-28`):
+
+1. Extracts Authorization header
+2. Strips "bearer " or "Bearer " prefix
+3. Calls `jsonwebtoken.verify()` with the server secret
+4. Throws error if verification fails
+5. Attaches decoded user to request object
+6. Calls `next()` to proceed to controller
+
+<Note>
+  The middleware attaches the decoded user object to `req.__user`, making user information available to subsequent handlers without additional database queries.
+</Note>

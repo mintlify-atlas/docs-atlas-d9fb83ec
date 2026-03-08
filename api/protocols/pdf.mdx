@@ -1,0 +1,243 @@
+---
+title: "Generate Protocol PDF"
+api: "GET /api/protocols/pdf"
+description: "Generate a consolidated PDF document containing multiple protocols for a specific client"
+---
+
+## Authentication
+
+**This endpoint does NOT require authentication.** It is designed to be accessible without a JWT token, allowing public access to protocol documents (e.g., for client portals or email attachments).
+
+## Query Parameters
+
+<ParamField query="ClientId" type="integer" required>
+  The ID of the client whose protocols should be included in the PDF
+</ParamField>
+
+<ParamField query="type" type="string" default="Liberado para pagamento">
+  Filter protocols by status. Only protocols with this status will be included in the PDF.
+  
+  **Possible values:**
+  - `Em aberto` - Open protocols
+  - `Liberado para pagamento` - Protocols released for payment (default)
+  - `Fechado` - Closed protocols
+  - `Cancelado` - Cancelled protocols
+</ParamField>
+
+## Response
+
+Returns a PDF file as binary content.
+
+### Response Headers
+
+- **Content-Type:** `application/pdf`
+- **Content-Disposition:** `attachment; filename=protocols_{client_name}_{timestamp}.pdf`
+
+The filename is automatically generated using:
+- Client name (normalized to lowercase with spaces replaced by underscores)
+- Current timestamp in milliseconds
+- Example: `protocols_acme_corporation_1709900400000.pdf`
+
+## PDF Contents
+
+The generated PDF includes:
+
+- **Client Information** - Client name and details from the database
+- **Service Orders** - All service orders belonging to the client that have protocols matching the specified status
+- **Subscriptions** - All subscriptions belonging to the client that have protocols matching the specified status
+- **Protocol Details** for each service order and subscription:
+  - Protocol products with pricing and charge type
+  - Protocol registers (services and expenses)
+  - Receipt information
+  - Project information
+- **Company Configuration** - Logo and branding from system configuration
+
+## Example Request
+
+### Generate PDF for protocols ready for payment
+
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols/pdf?ClientId=12&type=Liberado%20para%20pagamento' \
+  --output protocols.pdf
+```
+
+### Generate PDF for open protocols
+
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols/pdf?ClientId=12&type=Em%20aberto' \
+  --output open_protocols.pdf
+```
+
+### Generate PDF for closed protocols
+
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols/pdf?ClientId=12&type=Fechado' \
+  --output closed_protocols.pdf
+```
+
+## Implementation Details
+
+The endpoint performs the following operations:
+
+1. **Fetch Client Data** - Retrieves client information by `ClientId`
+2. **Query Service Orders** - Finds all service orders for the client, including:
+   - Associated projects
+   - Protocols matching the specified status
+   - Protocol products with product details
+   - Protocol registers (services and expenses)
+   - Receipts
+3. **Query Subscriptions** - Finds all subscriptions for the client with the same includes
+4. **Load System Configuration** - Retrieves company logo and branding settings
+5. **Render Template** - Uses EJS template engine to generate HTML from `src/views/budget_multi.ejs`
+6. **Generate PDF** - Uses Puppeteer (headless Chrome) to convert HTML to PDF
+7. **Return File** - Streams the PDF file to the client with appropriate headers
+
+## Use Cases
+
+### Monthly Billing Report
+
+Generate a PDF containing all protocols ready for payment for monthly invoicing:
+
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols/pdf?ClientId=12&type=Liberado%20para%20pagamento' \
+  --output monthly_invoice_march_2026.pdf
+```
+
+### Client Portal Access
+
+Provide clients with access to their open protocols without requiring authentication:
+
+```html
+<a href="https://api.devefficiency.com/api/protocols/pdf?ClientId=12&type=Em%20aberto" download>
+  Download Open Protocols Report
+</a>
+```
+
+### Audit Trail
+
+Generate historical records of closed protocols for compliance:
+
+```bash
+curl --request GET \
+  --url 'https://api.devefficiency.com/api/protocols/pdf?ClientId=12&type=Fechado' \
+  --output audit_trail_q1_2026.pdf
+```
+
+## Error Responses
+
+### Client Not Found
+
+If the specified client ID does not exist:
+
+```json
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Client not found"
+}
+```
+
+### Missing ClientId Parameter
+
+If `ClientId` is not provided in query parameters:
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "ClientId is required"
+}
+```
+
+### Invalid Status Type
+
+If an invalid status value is provided:
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "Invalid status type"
+}
+```
+
+### PDF Generation Error
+
+If the PDF generation process fails:
+
+```json
+{
+  "statusCode": 500,
+  "error": "Internal Server Error",
+  "message": "Failed to generate PDF"
+}
+```
+
+## Technical Specifications
+
+### PDF Generation Stack
+
+- **Template Engine:** EJS (Embedded JavaScript Templates)
+- **Template File:** `src/views/budget_multi.ejs`
+- **PDF Renderer:** Puppeteer with headless Chrome
+- **Chrome Binary:** `/usr/bin/google-chrome`
+- **Render Options:**
+  - Headless mode enabled
+  - No sandbox mode (for containerized environments)
+  - GPU disabled
+  - Network idle wait strategy
+
+### Data Relationships Included
+
+The PDF generation includes comprehensive data relationships:
+
+```
+Client
+├── Service Orders
+│   ├── Project
+│   └── Protocols (filtered by status)
+│       ├── Protocol Products
+│       │   └── Product Details
+│       ├── Protocol Registers
+│       └── Receipts
+└── Subscriptions
+    ├── Project
+    └── Protocols (filtered by status)
+        ├── Protocol Products
+        │   └── Product Details
+        ├── Protocol Registers
+        └── Receipts
+```
+
+### Configuration Assets
+
+The PDF includes company branding from the `Config` table:
+- Company logo (converted to Base64 for embedding)
+- Supported image formats: PNG, JPG, JPEG, GIF
+- Other configuration values (company name, contact info, etc.)
+
+## Performance Considerations
+
+- **PDF Generation Time:** Typically 2-5 seconds depending on the number of protocols
+- **Resource Usage:** Puppeteer launches a Chrome instance, which requires ~100-200MB of memory
+- **Concurrent Requests:** Limited by available system resources; consider implementing request queuing for high-traffic scenarios
+- **File Size:** Varies based on content, typically 50KB-500KB per protocol
+
+## Security Notes
+
+- **No Authentication Required:** This endpoint is publicly accessible. Consider adding authentication if protocols contain sensitive information
+- **Client ID Validation:** Only valid client IDs will return data; invalid IDs return a 404 error
+- **Data Exposure:** Any user with a valid client ID can access protocol information. Implement access controls if needed
+- **Rate Limiting:** Consider implementing rate limiting to prevent abuse and resource exhaustion
+
+## Best Practices
+
+1. **Cache PDFs:** Consider caching generated PDFs to reduce server load for frequently accessed documents
+2. **Async Generation:** For large documents, consider implementing asynchronous PDF generation with a webhook callback
+3. **Filename Sanitization:** The endpoint automatically sanitizes client names for safe filenames
+4. **Error Handling:** Always check for errors before attempting to process the PDF on the client side
+5. **Download vs. Inline:** The `Content-Disposition: attachment` header forces download; modify to `inline` for browser preview

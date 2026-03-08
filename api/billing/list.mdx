@@ -1,0 +1,187 @@
+---
+title: "List Billings"
+api: "GET /api/billings"
+description: "Retrieve a list of billings with optional filtering by client, date range, and pagination"
+---
+
+## Authentication
+
+This endpoint requires JWT authentication. Include the token in the Authorization header:
+
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+## Query Parameters
+
+<ParamField query="ClientId" type="integer" optional>
+  Filter billings by client ID
+</ParamField>
+
+<ParamField query="startDate" type="string" optional>
+  Start date for filtering billings by due date (ISO 8601 format: YYYY-MM-DD)
+</ParamField>
+
+<ParamField query="endDate" type="string" optional>
+  End date for filtering billings by due date (ISO 8601 format: YYYY-MM-DD). Must be used together with startDate
+</ParamField>
+
+<ParamField query="limit" type="integer" optional>
+  Maximum number of billings to return. If not specified, all matching billings are returned
+</ParamField>
+
+## Response
+
+Returns an array of billing objects ordered by creation date (most recent first). Each billing includes the associated Client information.
+
+<ResponseField name="id" type="integer">
+  Unique identifier for the billing
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status of the billing. Possible values:
+  - `pendente` - Pending payment
+  - `pago` - Paid
+  - `cancelado` - Cancelled
+  
+  Default: `pendente`
+</ResponseField>
+
+<ResponseField name="total_value" type="decimal">
+  Total billing amount with 2 decimal places precision. Default: 0.00
+</ResponseField>
+
+<ResponseField name="due_date" type="date">
+  Payment due date in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="payment_date" type="date" optional>
+  Actual payment date in ISO 8601 format. Only set when status is `pago`
+</ResponseField>
+
+<ResponseField name="method" type="enum">
+  Payment method for this billing. Possible values:
+  - `Pix` - Instant payment
+  - `Boleto` - Bank slip
+  - `Cartão` - Credit/debit card
+  - `Transferência` - Bank transfer
+  - `Espécie` - Cash
+  
+  Default: `Boleto`
+</ResponseField>
+
+<ResponseField name="ClientId" type="integer">
+  Foreign key reference to the Client being billed
+</ResponseField>
+
+<ResponseField name="BankAccountId" type="integer" optional>
+  Foreign key reference to the BankAccount for receiving payment
+</ResponseField>
+
+<ResponseField name="createdAt" type="date">
+  Timestamp when the billing was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="date">
+  Timestamp when the billing was last updated
+</ResponseField>
+
+<ResponseField name="Client" type="object">
+  Associated client information
+  
+  <Expandable title="Client properties">
+    <ResponseField name="id" type="integer">
+      Client's unique identifier
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Client's full name or company name
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      Client's email address
+    </ResponseField>
+    
+    <ResponseField name="phone" type="string">
+      Client's phone number
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<RequestExample>
+```bash cURL
+curl -X GET "https://api.devefficiency.com/api/billings?ClientId=5&limit=10" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+```bash Filter by Date Range
+curl -X GET "https://api.devefficiency.com/api/billings?startDate=2026-01-01&endDate=2026-03-31" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+```
+
+```bash All Billings
+curl -X GET "https://api.devefficiency.com/api/billings" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json"
+```
+</RequestExample>
+
+<ResponseExample>
+```json 200 Success
+[
+  {
+    "id": 42,
+    "status": "pago",
+    "total_value": "1250.50",
+    "due_date": "2026-03-15T00:00:00.000Z",
+    "payment_date": "2026-03-10T14:30:00.000Z",
+    "method": "Pix",
+    "ClientId": 5,
+    "BankAccountId": 2,
+    "createdAt": "2026-02-15T10:00:00.000Z",
+    "updatedAt": "2026-03-10T14:30:00.000Z",
+    "Client": {
+      "id": 5,
+      "name": "Acme Corporation",
+      "email": "billing@acme.com",
+      "phone": "+55 11 98765-4321"
+    }
+  },
+  {
+    "id": 41,
+    "status": "pendente",
+    "total_value": "2800.00",
+    "due_date": "2026-03-20T00:00:00.000Z",
+    "payment_date": null,
+    "method": "Boleto",
+    "ClientId": 5,
+    "BankAccountId": 2,
+    "createdAt": "2026-02-10T10:00:00.000Z",
+    "updatedAt": "2026-02-10T10:00:00.000Z",
+    "Client": {
+      "id": 5,
+      "name": "Acme Corporation",
+      "email": "billing@acme.com",
+      "phone": "+55 11 98765-4321"
+    }
+  }
+]
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized",
+  "message": "Invalid or missing authentication token"
+}
+```
+</ResponseExample>
+
+## Notes
+
+- Billings are automatically ordered by creation date in descending order (newest first)
+- The date range filter uses the `due_date` field and includes billings with null due dates using an OR condition
+- When filtering by date range, both `startDate` and `endDate` must be provided
+- The Client relationship is always included in the response for easy reference
+- Date filtering uses Sequelize's `Op.between` operator to find billings within the specified range

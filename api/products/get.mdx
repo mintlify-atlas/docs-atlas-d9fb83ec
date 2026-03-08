@@ -1,0 +1,161 @@
+---
+title: "Get Product"
+api: "GET /api/products/:id"
+description: "Retrieve detailed information about a specific product or service"
+---
+
+## Overview
+
+This endpoint fetches a single product by its unique identifier. Use this to get complete details about a product, including pricing, cost, and license generation settings before associating it with protocols or service orders.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Include your JWT token in the format: `Bearer YOUR_JWT_TOKEN`
+</ParamField>
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique identifier of the product to retrieve
+</ParamField>
+
+## Response
+
+<ResponseField name="product" type="object">
+  <Expandable title="Product Object">
+    <ResponseField name="id" type="integer">
+      Unique identifier for the product
+    </ResponseField>
+    
+    <ResponseField name="description" type="string" required>
+      Product or service description. Maximum length: 255 characters
+    </ResponseField>
+    
+    <ResponseField name="value" type="float" required>
+      Sale price of the product. This is the amount charged to clients when the product is included in a protocol or service order. Defaults to 0 if not specified.
+    </ResponseField>
+    
+    <ResponseField name="coust" type="float" required>
+      Cost of the product to your organization. Used for profit margin calculations and financial reporting. Defaults to 0 if not specified.
+      
+      **Profit Margin Calculation:**
+      ```
+      Margin = ((value - coust) / value) × 100
+      ```
+    </ResponseField>
+    
+    <ResponseField name="generate_license" type="boolean" required>
+      Indicates whether this product should trigger automatic license generation when added to a protocol. 
+      
+      - `true`: Automatically creates a license record when added to a protocol via the Protocol Products API
+      - `false`: Product is added to protocol without license generation
+      
+      Defaults to `false`.
+    </ResponseField>
+    
+    <ResponseField name="createdAt" type="string">
+      Timestamp when the product was created (ISO 8601 format)
+    </ResponseField>
+    
+    <ResponseField name="updatedAt" type="string">
+      Timestamp when the product was last updated (ISO 8601 format)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+```bash cURL
+curl --request GET \
+  --url https://api.devefficiency.com/products/1 \
+  --header 'Authorization: Bearer YOUR_JWT_TOKEN'
+```
+
+```javascript JavaScript
+const productId = 1;
+const response = await fetch(`https://api.devefficiency.com/products/${productId}`, {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+const product = await response.json();
+```
+
+```python Python
+import requests
+
+product_id = 1
+headers = {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+}
+
+response = requests.get(
+    f'https://api.devefficiency.com/products/{product_id}',
+    headers=headers
+)
+
+product = response.json()
+```
+
+## Example Response
+
+```json 200 - Success
+{
+  "id": 1,
+  "description": "Enterprise Software License",
+  "value": 499.99,
+  "coust": 150.00,
+  "generate_license": true,
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T10:30:00.000Z"
+}
+```
+
+```json 404 - Not Found
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Product not found"
+}
+```
+
+```json 401 - Unauthorized
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "message": "Invalid or expired token"
+}
+```
+
+## Common Use Cases
+
+### Calculating Profit Margins
+
+Use the `value` and `coust` fields to calculate profit margins:
+
+```javascript
+const profitMargin = ((product.value - product.coust) / product.value) * 100;
+console.log(`Profit margin: ${profitMargin.toFixed(2)}%`);
+// Output: Profit margin: 69.99%
+```
+
+### Checking License Requirements
+
+Before adding a product to a protocol, verify if it requires license generation:
+
+```javascript
+if (product.generate_license) {
+  console.log('This product will automatically generate a license when added to a protocol');
+  // Ensure your protocol workflow handles license creation
+}
+```
+
+## Related Endpoints
+
+- [List Products](/api/products/list) - Get all products
+- [Create Product](/api/products/create) - Add a new product
+- [Update Product](/api/products/update) - Modify product details
+- [Protocol Products API](/api/protocols/products) - Associate products with protocols

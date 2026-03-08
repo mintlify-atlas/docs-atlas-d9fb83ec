@@ -1,0 +1,586 @@
+---
+title: 'Database Configuration'
+description: 'Set up Sequelize ORM with MySQL 8.4 for data persistence'
+icon: 'database'
+---
+
+## Overview
+
+DevEfficiency uses **Sequelize ORM** with **MySQL 8.4** for data persistence. The system provides automated model synchronization, connection pooling, and comprehensive database management through environment-based configuration.
+
+<Warning>
+MySQL 8.4 or higher is required. Earlier versions may not support all features used by the application.
+</Warning>
+
+## Database Requirements
+
+### MySQL Version
+
+- **Required**: MySQL 8.4 or higher
+- **Recommended**: MySQL 8.4 LTS for long-term support
+- **Character Set**: UTF-8 (utf8mb4)
+- **Collation**: utf8mb4_unicode_ci
+
+### System Resources
+
+- **Minimum RAM**: 2GB for MySQL server
+- **Recommended Storage**: SSD for optimal performance
+- **Network**: Low-latency connection for remote databases
+
+## Environment Configuration
+
+### Database Variables
+
+Configure database connection in your `.env` file:
+
+```bash .env.example
+DB_NAME=name
+DB_USER=user
+DB_PASS=pass
+DB_HOST=localhost
+```
+
+<Info>
+All database environment variables are required for the application to start successfully.
+</Info>
+
+### Variable Reference
+
+| Variable | Description | Example | Default |
+|----------|-------------|---------|----------|
+| `DB_NAME` | Database name | `devefficiency` | None |
+| `DB_USER` | MySQL username | `admin` | None |
+| `DB_PASS` | MySQL password | `secure_password` | None |
+| `DB_HOST` | MySQL host address | `localhost` or `mysql.example.com` | None |
+
+## Sequelize Configuration
+
+### Database Connection
+
+The database connection is configured in `src/db.ts:3`:
+
+```typescript src/db.ts
+import { Sequelize } from 'sequelize'
+
+const db = new Sequelize(String(process.env.DB_NAME), String(process.env.DB_USER), String(process.env.DB_PASS), {
+    host: String(process.env.DB_HOST),
+    dialect: 'mysql',
+    pool: {
+        max: 5,
+        min: 0,
+        idle: 10000,
+    },
+    logging: console.log,
+})
+
+export default db
+```
+
+### Connection Pool Settings
+
+The connection pool manages database connections efficiently:
+
+```typescript
+pool: {
+    max: 5,        // Maximum number of connections
+    min: 0,        // Minimum number of connections
+    idle: 10000,   // Maximum time (ms) a connection can be idle before being released
+}
+```
+
+<Tip>
+Adjust pool settings based on your application's concurrency requirements. High-traffic applications may benefit from increasing `max` to 10-20 connections.
+</Tip>
+
+### Configuration Options
+
+| Option | Value | Purpose |
+|--------|-------|----------|
+| `dialect` | `'mysql'` | Specifies MySQL as the database type |
+| `logging` | `console.log` | Logs SQL queries to console for debugging |
+| `pool.max` | `5` | Maximum concurrent database connections |
+| `pool.min` | `0` | Minimum connections maintained in pool |
+| `pool.idle` | `10000` | Idle timeout in milliseconds |
+
+## Model Synchronization
+
+### Sync Process
+
+The application automatically synchronizes database models on startup (`src/sync.ts:28`):
+
+```typescript src/sync.ts
+import User from './models/User'
+import Client from './models/Client'
+import Credential from './models/Credential'
+import Project from './models/Project'
+import Subproject from './models/Subproject'
+import Service_order from './models/Service_order'
+import Protocol from './models/Protocol'
+import Protocol_register from './models/Protocol_register'
+import Receipts from './models/Receipts'
+import Product from './models/Product'
+import Protocol_product from './models/Protocol_product'
+import Server from './models/Server'
+import Contact from './models/Contact'
+import Address from './models/Address'
+import Check from './models/Check'
+import License from './models/License'
+import Subscription from './models/Subscription'
+import Billing from './models/Billing'
+import BillingProtocol from './models/BillingProtocol'
+import BankAccount from './models/BankAccount'
+import CostCenter from './models/CostCenter'
+import Supplier from './models/Supplier'
+import Payable from './models/Payable'
+import BankTransfer from './models/BankTransfer'
+import Config from './models/Config'
+import seedConfigs from './seeds/configSeed'
+
+async function syncModels(): Promise<true> {
+    await User.sync()
+
+    await Client.sync({ alter: { drop: false } })
+
+    await Product.sync({ alter: { drop: false } })
+
+    await Contact.sync()
+    await Address.sync()
+    await Credential.sync()
+    await Server.sync()
+
+    await Project.sync({ alter: { drop: false } })
+    await Subproject.sync()
+    await Check.sync()
+
+    await Service_order.sync()
+    await Subscription.sync({ alter: { drop: false } })
+
+    await License.sync({ alter: { drop: false } })
+
+    await Protocol.sync({ alter: { drop: false } })
+    await Protocol_register.sync()
+    await Protocol_product.sync({ alter: { drop: false } })
+
+    await BankAccount.sync({ alter: { drop: false } })
+    await BankTransfer.sync({ alter: { drop: false } })
+
+    await Billing.sync({ alter: { drop: false } })
+    await BillingProtocol.sync({ alter: { drop: false } })
+
+    await CostCenter.sync()
+    await Supplier.sync()
+
+    await Receipts.sync({ alter: { drop: false } })
+    await Payable.sync()
+
+    await Config.sync({ alter: { drop: false } })
+    await seedConfigs()
+
+    return true
+}
+
+export default syncModels
+```
+
+### Sync Strategies
+
+The application uses two synchronization strategies:
+
+<CodeGroup>
+
+```typescript Basic Sync
+await User.sync()
+await Contact.sync()
+```
+
+```typescript Alter Sync (Safe Updates)
+await Client.sync({ alter: { drop: false } })
+await Product.sync({ alter: { drop: false } })
+```
+
+</CodeGroup>
+
+#### Basic Sync
+
+```typescript
+await Model.sync()
+```
+
+Creates the table if it doesn't exist. Does not modify existing tables.
+
+#### Alter Sync with Drop Protection
+
+```typescript
+await Model.sync({ alter: { drop: false } })
+```
+
+Updates table schema to match model definition:
+- Adds new columns
+- Modifies column types
+- **Does NOT drop columns** (`drop: false`)
+- Preserves existing data
+
+<Warning>
+The `alter: { drop: false }` option protects against data loss by preventing column drops. Manually remove columns if needed.
+</Warning>
+
+## Database Models
+
+### Model Organization
+
+Models are synchronized in dependency order to respect foreign key relationships:
+
+<Steps>
+
+<Step title="Core Models">
+User, Client, Product - Foundation entities without dependencies.
+</Step>
+
+<Step title="Related Entities">
+Contact, Address, Credential, Server - Entities related to core models.
+</Step>
+
+<Step title="Business Logic">
+Project, Service_order, Protocol, Subscription - Main business entities.
+</Step>
+
+<Step title="Financial">
+Billing, BankAccount, BankTransfer - Financial tracking models.
+</Step>
+
+<Step title="Configuration">
+Config model with seeded default values.
+</Step>
+
+</Steps>
+
+### Complete Model List
+
+**Core Entities**:
+- `User` - System users and authentication
+- `Client` - Customer information
+- `Product` - Service products
+
+**Relationships**:
+- `Contact` - Client contacts
+- `Address` - Physical addresses
+- `Credential` - Client credentials
+- `Server` - Server information
+
+**Projects & Services**:
+- `Project` - Client projects
+- `Subproject` - Project subdivisions
+- `Service_order` - Service orders
+- `Subscription` - Recurring services
+
+**Protocols**:
+- `Protocol` - Service protocols
+- `Protocol_register` - Protocol entries
+- `Protocol_product` - Products in protocols
+
+**Financial**:
+- `Billing` - Invoices and billing
+- `BillingProtocol` - Billing-protocol relationships
+- `Receipts` - Payment receipts
+- `BankAccount` - Bank account information
+- `BankTransfer` - Bank transfers
+- `Payable` - Accounts payable
+- `CostCenter` - Cost centers
+- `Supplier` - Supplier information
+
+**Monitoring**:
+- `Check` - System health checks
+- `License` - License tracking
+
+**Configuration**:
+- `Config` - System configuration
+
+## Database Seeding
+
+### Configuration Seeding
+
+Default configurations are seeded after model sync (`src/sync.ts:66`):
+
+```typescript src/sync.ts
+await Config.sync({ alter: { drop: false } })
+await seedConfigs() // Seed default configurations
+```
+
+<Info>
+Seeding runs automatically on application startup, ensuring required configuration values exist.
+</Info>
+
+### Custom Seeds
+
+Create custom seed functions following the pattern:
+
+```typescript
+// src/seeds/customSeed.ts
+import Model from '../models/Model'
+
+export default async function seedCustomData() {
+    const existing = await Model.findOne({ where: { key: 'value' } })
+    
+    if (!existing) {
+        await Model.create({
+            key: 'value',
+            // ... other fields
+        })
+    }
+}
+```
+
+Then import and call in `syncModels()`:
+
+```typescript src/sync.ts
+import seedCustomData from './seeds/customSeed'
+
+async function syncModels(): Promise<true> {
+    // ... existing sync code
+    
+    await seedCustomData()
+    
+    return true
+}
+```
+
+## Connection Management
+
+### Testing Connection
+
+Verify database connectivity:
+
+```typescript
+import db from './db'
+
+async function testConnection() {
+    try {
+        await db.authenticate()
+        console.log('Database connection established successfully.')
+    } catch (error) {
+        console.error('Unable to connect to the database:', error)
+    }
+}
+```
+
+### Closing Connections
+
+Gracefully close database connections on application shutdown:
+
+```typescript
+process.on('SIGINT', async () => {
+    await db.close()
+    console.log('Database connection closed')
+    process.exit(0)
+})
+```
+
+## Production Configuration
+
+### Security Best Practices
+
+<Steps>
+
+<Step title="Use Strong Passwords">
+Generate secure passwords for database users.
+</Step>
+
+<Step title="Principle of Least Privilege">
+Grant only necessary permissions to the application database user.
+</Step>
+
+<Step title="Network Security">
+Use SSL/TLS for remote database connections.
+</Step>
+
+<Step title="Environment Isolation">
+Keep production credentials separate from development.
+</Step>
+
+</Steps>
+
+### SSL/TLS Configuration
+
+For secure production connections:
+
+```typescript
+const db = new Sequelize(String(process.env.DB_NAME), String(process.env.DB_USER), String(process.env.DB_PASS), {
+    host: String(process.env.DB_HOST),
+    dialect: 'mysql',
+    dialectOptions: {
+        ssl: {
+            require: true,
+            rejectUnauthorized: true,
+            ca: fs.readFileSync('/path/to/ca-cert.pem').toString(),
+        }
+    },
+    pool: {
+        max: 10,
+        min: 2,
+        idle: 10000,
+    },
+    logging: false, // Disable logging in production
+})
+```
+
+### Performance Tuning
+
+**Production Pool Settings**:
+
+```typescript
+pool: {
+    max: 20,          // Higher for production traffic
+    min: 5,           // Maintain minimum connections
+    idle: 10000,
+    acquire: 30000,   // Maximum time to acquire connection
+    evict: 10000      // Check for idle connections interval
+}
+```
+
+**Disable Query Logging**:
+
+```typescript
+logging: false  // Improve performance by disabling SQL logging
+```
+
+<Tip>
+Use environment variables to switch between development and production logging:
+```typescript
+logging: process.env.NODE_ENV === 'development' ? console.log : false
+```
+</Tip>
+
+## Backup and Recovery
+
+### Automated Backups
+
+Schedule regular database backups:
+
+```bash
+#!/bin/bash
+# backup-db.sh
+
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="/backups/mysql"
+DB_NAME="devefficiency"
+
+mysqldump -u $DB_USER -p$DB_PASS $DB_NAME > $BACKUP_DIR/backup_$DATE.sql
+gzip $BACKUP_DIR/backup_$DATE.sql
+
+# Keep only last 30 days
+find $BACKUP_DIR -name "backup_*.sql.gz" -mtime +30 -delete
+```
+
+### Restore from Backup
+
+```bash
+# Restore from gzipped backup
+gunzip < backup_20260308_120000.sql.gz | mysql -u $DB_USER -p$DB_PASS $DB_NAME
+
+# Restore from plain SQL
+mysql -u $DB_USER -p$DB_PASS $DB_NAME < backup_20260308_120000.sql
+```
+
+## Troubleshooting
+
+### Connection Errors
+
+**Error: "Access denied for user"**
+
+```bash
+# Grant privileges to database user
+mysql -u root -p
+GRANT ALL PRIVILEGES ON devefficiency.* TO 'user'@'localhost' IDENTIFIED BY 'password';
+FLUSH PRIVILEGES;
+```
+
+**Error: "Unknown database"**
+
+```bash
+# Create database
+mysql -u root -p
+CREATE DATABASE devefficiency CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+### Pool Timeout Issues
+
+If experiencing connection pool timeouts:
+
+```typescript
+pool: {
+    max: 10,
+    min: 2,
+    idle: 10000,
+    acquire: 60000,  // Increase acquire timeout to 60 seconds
+    evict: 1000
+}
+```
+
+### Migration Issues
+
+**Columns not updating**:
+
+The `alter: { drop: false }` option prevents column drops. To modify columns:
+
+```sql
+-- Manually alter columns when needed
+ALTER TABLE clients MODIFY COLUMN email VARCHAR(255);
+ALTER TABLE clients DROP COLUMN old_column;
+```
+
+### Query Performance
+
+Enable query logging temporarily to debug slow queries:
+
+```typescript
+const db = new Sequelize(/*...config*/, {
+    logging: (sql, timing) => {
+        if (timing > 1000) { // Log queries taking more than 1 second
+            console.warn(`Slow query (${timing}ms):`, sql)
+        }
+    },
+    benchmark: true
+})
+```
+
+## Monitoring
+
+### Database Health Checks
+
+Implement health check endpoint:
+
+```typescript
+app.get('/health/database', async (req, res) => {
+    try {
+        await db.authenticate()
+        const [results] = await db.query('SELECT 1')
+        res.status(200).json({ status: 'healthy', database: 'connected' })
+    } catch (error) {
+        res.status(503).json({ status: 'unhealthy', error: error.message })
+    }
+})
+```
+
+### Connection Pool Monitoring
+
+```typescript
+const poolStats = {
+    total: db.connectionManager.pool.size,
+    available: db.connectionManager.pool.available,
+    using: db.connectionManager.pool.using,
+    waiting: db.connectionManager.pool.waiting
+}
+
+console.log('Pool stats:', poolStats)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Email Notifications" icon="envelope" href="/integration/email-notifications">
+    Set up email notifications
+  </Card>
+  <Card title="PDF Generation" icon="file-pdf" href="/integration/pdf-generation">
+    Generate PDF documents
+  </Card>
+</CardGroup>

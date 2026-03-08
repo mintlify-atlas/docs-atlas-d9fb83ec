@@ -1,0 +1,591 @@
+---
+title: 'Key Features'
+description: 'Comprehensive overview of DevEfficiency core capabilities'
+icon: 'star'
+---
+
+DevEfficiency provides a complete solution for managing client development projects, from initial service orders through billing and payment collection. The platform automates complex workflows while maintaining detailed financial tracking.
+
+## Core Features
+
+<CardGroup cols={2}>
+  <Card title="Service Order Management" icon="clipboard-list" iconType="duotone">
+    Track development requests from submission through completion with automated protocol creation and status management.
+  </Card>
+  
+  <Card title="Protocol System" icon="file-contract" iconType="duotone">
+    Comprehensive tracking of work items, products, and services with automatic billing integration.
+  </Card>
+  
+  <Card title="Client Management" icon="users" iconType="duotone">
+    Centralized client profiles with contacts, addresses, projects, and customizable billing schedules.
+  </Card>
+  
+  <Card title="Project Organization" icon="folder-tree" iconType="duotone">
+    Organize work by projects and subprojects with support for APIs, Bots, Websites, Automations, and Crawlers.
+  </Card>
+  
+  <Card title="Automated Billing" icon="file-invoice-dollar" iconType="duotone">
+    Smart billing generation based on protocol status with customizable due dates and payment tracking.
+  </Card>
+  
+  <Card title="Financial Tracking" icon="chart-line" iconType="duotone">
+    Real-time financial history with inflows, outflows, and comprehensive reporting capabilities.
+  </Card>
+  
+  <Card title="Subscription Management" icon="rotate" iconType="duotone">
+    Automated recurring billing for monthly and annual subscriptions with protocol generation.
+  </Card>
+  
+  <Card title="PDF Generation" icon="file-pdf" iconType="duotone">
+    Professional PDF documents for service orders and billing using Puppeteer and EJS templates.
+  </Card>
+  
+  <Card title="Email Notifications" icon="envelope" iconType="duotone">
+    Automated email system powered by Nodemailer for client communications.
+  </Card>
+  
+  <Card title="JWT Authentication" icon="shield-check" iconType="duotone">
+    Secure API access with JWT tokens and bcrypt password hashing.
+  </Card>
+  
+  <Card title="Rate Limiting" icon="gauge-high" iconType="duotone">
+    Built-in API protection with configurable request limits per time window.
+  </Card>
+  
+  <Card title="Multi-Account Banking" icon="building-columns" iconType="duotone">
+    Support for multiple bank accounts with inter-account transfers and reconciliation.
+  </Card>
+</CardGroup>
+
+## Service Order Management
+
+Service orders represent client requests and track work from initiation to completion. Each service order automatically creates an associated protocol for detailed work tracking.
+
+<AccordionGroup>
+  <Accordion title="Service Order Lifecycle">
+    Service orders progress through defined statuses:
+    
+    - **Em avaliação** - Initial review and scoping
+    - **Orçamento enviado** - Quote has been sent to client
+    - **Na fila** - Approved and queued for work
+    - **Em correções** - Revisions in progress
+    - **Pendente** - Awaiting client action
+    - **Finalizado** - Work completed
+    - **Cancelado** - Cancelled
+    
+    The system automatically synchronizes service order status with protocol status:
+    
+    ```typescript
+    if (status == 'Finalizado') await protocol?.update({ status: 'Fechado' })
+    if (status == 'Cancelado') await protocol?.update({ status: 'Cancelado' })
+    ```
+    
+    From `src/controllers/serviceOrdersController.ts:99-100`
+  </Accordion>
+  
+  <Accordion title="Data Model">
+    ```typescript
+    class Service_order extends Model {
+        declare id: CreationOptional<number>
+        declare subject: string
+        declare description: CreationOptional<string>
+        declare status: CreationOptional<
+            'Em avaliação' | 'Orçamento enviado' | 'Na fila' | 
+            'Em correções' | 'Pendente' | 'Finalizado' | 'Cancelado'
+        >
+        
+        declare ProjectId: ForeignKey<Project['id']>
+        declare ClientId: ForeignKey<Client['id']>
+    }
+    ```
+    
+    From `src/models/Service_order.ts:21-30`
+  </Accordion>
+  
+  <Accordion title="API Endpoints">
+    ```typescript
+    // List service orders with filtering
+    GET /api/os?filter=pending&ClientId=1&status=Pendente,Na fila
+    
+    // Create new service order
+    POST /api/os
+    {
+      "subject": "New website development",
+      "description": "E-commerce site with payment integration",
+      "ProjectId": 5,
+      "ClientId": 10
+    }
+    
+    // Update service order status
+    PUT /api/os/:id
+    {
+      "status": "Finalizado"
+    }
+    
+    // Generate PDF budget
+    GET /api/os/:id/pdf
+    ```
+    
+    From `src/routes.ts:118-123`
+  </Accordion>
+</AccordionGroup>
+
+## Protocol System
+
+Protocols track the detailed work items, products, and services for each service order or subscription. They manage the complete lifecycle from work assignment through billing.
+
+<Info>
+  Protocols are automatically created when a new service order is created. They serve as the central hub for tracking all work items, products, receipts, and billing.
+</Info>
+
+### Protocol Components
+
+<Tabs>
+  <Tab title="Protocol Registers">
+    Track individual work items or services with hourly/fixed pricing:
+    
+    ```typescript
+    // Add work item to protocol
+    POST /api/protocols/registers
+    {
+      "ProtocolId": 15,
+      "description": "Frontend development",
+      "value": 2500.00,
+      "hours": 40
+    }
+    ```
+    
+    Work items contribute to the total protocol value and trigger billing calculations.
+  </Tab>
+  
+  <Tab title="Protocol Products">
+    Add products or recurring services to protocols:
+    
+    ```typescript
+    // Add product to protocol
+    POST /api/protocols/products
+    {
+      "ProtocolId": 15,
+      "ProductId": 3,
+      "value": 150.00,
+      "charge_type": "Mensal"
+    }
+    ```
+    
+    Products can have charge types: `Único`, `Mensal`, or `Anual`. Recurring charges automatically create subscriptions when the protocol is closed.
+  </Tab>
+  
+  <Tab title="Receipts">
+    Track payments received against protocols:
+    
+    ```typescript
+    // Record payment receipt
+    POST /api/protocols/receipts
+    {
+      "ProtocolId": 15,
+      "value": 1000.00,
+      "note": "Partial payment - 50% deposit",
+      "BankAccountId": 2
+    }
+    ```
+    
+    Receipts reduce the outstanding balance and trigger protocol closure when fully paid.
+  </Tab>
+</Tabs>
+
+### Protocol Status Flow
+
+```typescript
+status: 'Em aberto' | 'Liberado para pagamento' | 'Fechado' | 'Cancelado'
+```
+
+<Steps>
+  <Step title="Em aberto">
+    Initial state. Protocol is being populated with work items and products.
+  </Step>
+  
+  <Step title="Liberado para pagamento">
+    Protocol is complete and ready for billing. Automatically creates billing entry and adds to client's next invoice.
+    
+    ```typescript
+    // When protocol status changes to 'Liberado para pagamento'
+    const billing = await Billing.create(
+        { ClientId: client.id, status: 'pendente', due_date: nextDueDate },
+        { transaction }
+    )
+    
+    const value = protocol_products.reduce((sum, v) => sum + v.value, 0) +
+                  protocol_registers.reduce((sum, v) => sum + v.value, 0) -
+                  receipts.reduce((sum, v) => sum + v.value, 0)
+    
+    await BillingProtocol.create(
+        { BillingId: billing.id, ProtocolId: protocol.id, value },
+        { transaction }
+    )
+    ```
+    
+    From `src/hooks/protocolHooks.ts:157-179`
+  </Step>
+  
+  <Step title="Fechado">
+    Protocol is complete and fully paid. Service order is automatically marked as Finalizado.
+    
+    <Warning>
+      Protocols cannot be closed until receipts cover the full protocol value:
+      
+      ```typescript
+      if (total_receipt < total_cost)
+          throw new Error('Não é possivel finalizar, protocolo com recebimentos pendentes.')
+      ```
+      
+      From `src/hooks/protocolHooks.ts:28-29`
+    </Warning>
+  </Step>
+</Steps>
+
+## Client & Project Management
+
+### Client Structure
+
+Clients are central entities that connect to all major features:
+
+```typescript
+class Client extends Model {
+    declare id: CreationOptional<number>
+    declare name: string
+    declare corporate_name: CreationOptional<string>
+    declare document: CreationOptional<string>
+    declare email: CreationOptional<string>
+    declare due_day: CreationOptional<number>  // Default: 20
+}
+```
+
+From `src/models/Client.ts:26-34`
+
+<Note>
+  The `due_day` field determines when monthly billings are generated for the client. For example, if set to 20, all billings for that client will be due on the 20th of each month.
+</Note>
+
+### Project Types
+
+Projects organize work into categories with specific types:
+
+```typescript
+type: 'API' | 'Bot' | 'WebSite' | 'Automação' | 'Crawler' | 'Outros'
+```
+
+Projects can be marked as `fixed` for ongoing maintenance or recurring work.
+
+## Billing & Financial Tracking
+
+### Automated Billing
+
+Billing entries are automatically created when protocols reach "Liberado para pagamento" status. The system groups all pending protocols for a client into a single billing:
+
+```typescript
+// Billing model structure
+class Billing extends Model {
+    declare status: CreationOptional<string>  // pendente, pago, cancelado
+    declare total_value: CreationOptional<number>
+    declare due_date: CreationOptional<Date>
+    declare payment_date: CreationOptional<Date>
+    declare method: CreationOptional<'Pix' | 'Boleto' | 'Cartão' | 'Transferência' | 'Espécie'>
+}
+```
+
+From `src/models/Billing.ts:23-28`
+
+### Payment Processing
+
+When a billing is marked as paid, the system automatically:
+
+1. Closes fully-paid protocols
+2. Updates service order status to Finalizado
+3. Updates subscription status to Pago
+4. Creates new billing for partially-paid protocols
+
+```typescript
+static async afterUpdate(billing: Billing, options: InstanceUpdateOptions) {
+    if (billing.status === 'pago' && billing.previous('status') !== 'pago') {
+        const billingProtocols = await billing.getBillingProtocols()
+        
+        for (const billingProtocol of billingProtocols) {
+            const protocol = await Protocol.findByPk(billingProtocol.ProtocolId)
+            const protocolValue = /* calculate outstanding balance */
+            
+            if (protocolValue <= 0) {
+                await protocol.update({ status: 'Fechado' })
+            } else {
+                // Create new billing for remaining balance
+            }
+        }
+    }
+}
+```
+
+From `src/hooks/billingHooks.ts:13-44`
+
+### Financial History
+
+The financial history endpoint aggregates all monetary transactions:
+
+```typescript
+GET /api/financial-history?startDate=2024-01-01&endDate=2024-12-31
+```
+
+Returns a unified timeline combining:
+- **Inflows**: Receipts from client payments
+- **Outflows**: Payables to suppliers
+- **Transfers**: Inter-account bank transfers
+
+```typescript
+interface Transaction {
+    date: Date
+    description: string
+    value: number  // Negative for outflows, positive for inflows
+    type: 'inflow' | 'outflow'
+    relatedTo: string
+    showInSummary?: boolean  // False for internal transfers
+}
+```
+
+From `src/controllers/financialsController.ts:11-19`
+
+## Subscription Management
+
+Subscriptions enable automated recurring billing for monthly or annual services.
+
+### Subscription Creation
+
+When a protocol with recurring products (Mensal or Anual) is closed, a subscription is automatically created:
+
+```typescript
+if (charge_type) {
+    const subscription = await Subscription.create({
+        dueAt: /* next billing date based on charge_type */,
+        ClientId: service_order.ClientId,
+        ProjectId: service_order.ProjectId,
+        status: 'Pago',
+    })
+    
+    // Create next protocol with same products
+    const newProtocol = await subscription.createProtocol()
+    
+    for (let protocol_product of protocol_products) {
+        await newProtocol?.createProtocol_product({
+            ProductId: protocol_product.ProductId,
+            value: protocol_product.value,
+            charge_type: protocol_product.charge_type,
+        })
+    }
+}
+```
+
+From `src/hooks/protocolHooks.ts:79-112`
+
+### Subscription Worker
+
+A background worker runs every 10 minutes to manage subscription lifecycle:
+
+```typescript
+private async loop(): Promise<void> {
+    const protocols = await Protocol.findAll({
+        where: {
+            status: ['Em aberto', 'Liberado para pagamento'],
+            SubscriptionId: { [Op.gt]: 1 }
+        },
+        include: [Subscription]
+    })
+    
+    for (let protocol of protocols) {
+        // Release for payment 7 days before due date
+        if (moment(protocol.Subscription.dueAt).diff(moment(), 'days') > 7) continue
+        
+        protocol.status = 'Liberado para pagamento'
+        protocol.Subscription.status = 'Pendente'
+        
+        // Mark as unpaid 3 days after due date
+        if (moment().diff(moment(protocol.Subscription.dueAt).add(3, 'days'), 'days') >= 0) {
+            protocol.Subscription.status = 'Não pago'
+        }
+    }
+}
+```
+
+From `src/workers/subscriptionsWorker.ts:15-44`
+
+<Tip>
+  Subscription protocols are automatically released for payment 7 days before the due date, giving clients time to process payment.
+</Tip>
+
+## PDF Generation
+
+Professional PDF documents are generated using Puppeteer and EJS templates for both service orders and billings.
+
+### Service Order PDFs
+
+```typescript
+static async pdf(req: serviceOrdersRequest, res: FastifyReply) {
+    const os = await Service_order.findByPk(id, {
+        include: [
+            Client,
+            { model: Protocol, include: [Protocol_register, Receipts, 
+              { model: Protocol_product, include: [Product] }] },
+            { model: Project, include: [Client] }
+        ]
+    })
+    
+    const template = fs.readFileSync('src/views/budget.ejs', 'utf-8')
+    const html = ejs.render(template, { os, configMap })
+    
+    const browser = await puppeteer.launch({
+        headless: 'new',
+        executablePath: '/usr/bin/google-chrome',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+    })
+    
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: 'networkidle0' })
+    await page.emulateMediaType('screen')
+    const pdf = await page.pdf()
+    
+    res.header('Content-Type', 'application/pdf')
+    res.header('Content-Disposition', `attachment; filename=os_${os?.id}_${Date.now()}.pdf`)
+    return res.send(pdf)
+}
+```
+
+From `src/controllers/serviceOrdersController.ts:112-162`
+
+### Configuration Support
+
+PDFs can include custom branding loaded from the Config system, including logos and company information. Images are automatically converted to base64 for embedding:
+
+```typescript
+const config = await Config.findAll({})
+const configMap: { [key: string]: string | null } = {}
+
+config.forEach((cfg) => {
+    if (cfg.upload) {
+        const file = fs.readFileSync(path.join(process.cwd(), 'tmp', cfg.value))
+        const extension = path.extname(cfg.value).substring(1)
+        
+        if (['png', 'jpg', 'jpeg', 'gif'].includes(extension.toLowerCase())) {
+            const fileBase64 = Buffer.from(file).toString('base64')
+            configMap[cfg.type] = `data:image/${extension};base64,${fileBase64}`
+        }
+    } else {
+        configMap[cfg.type] = cfg.value
+    }
+})
+```
+
+From `src/controllers/serviceOrdersController.ts:126-141`
+
+## Email System
+
+Automated email notifications are sent using Nodemailer:
+
+```typescript
+const transporter = nodemialer.createTransport({
+    host: process.env.EMAIL_HOST,
+    secure: false,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+})
+
+export default function sendMail(to: string[] | string, subject: string, html: string): void {
+    if (!Array.isArray(to)) to = to.split(',')
+    to.push(process.env.EMAIL_CC as string)
+    
+    const from = `${process.env.EMAIL_NAME} <${process.env.EMAIL_FROM}>`
+    
+    transporter.sendMail({ from, to, subject, html })
+}
+```
+
+From `src/utils/sendEmail.ts:3-35`
+
+<Note>
+  All emails automatically CC a configured address from `EMAIL_CC` environment variable for record-keeping.
+</Note>
+
+## Authentication & Security
+
+### JWT Authentication
+
+API endpoints are protected using JWT tokens with 1-hour expiration:
+
+```typescript
+static async auth(req: authRequest, res: FastifyReply): Promise<FastifyReply> {
+    const { username, password } = req.body
+    const user = await User.findOne({ where: { username } })
+    
+    if (!user || !bcrypt.compareSync(password, user.password)) {
+        return res.status(401).send({ error: true, message: 'Usuário ou senha invalidos.' })
+    }
+    
+    const token = await jsonwebtoken.sign(
+        { user }, 
+        String(process.env.SECRET), 
+        { expiresIn: '1h' }
+    )
+    
+    return res.send({
+        type: 'bearer',
+        token,
+        expires_in: date.valueOf()
+    })
+}
+```
+
+From `src/controllers/authController.ts:17-36`
+
+### Middleware Protection
+
+Protected routes use the `isAuthed` middleware:
+
+```typescript
+export default function isAuthed(req: Request, res: Reply, next: DoneFunction): void {
+    const { authorization } = req.headers
+    
+    const decoded = jsonwebtoken.verify(
+        authorization?.replace('bearer ', '').replace('Bearer ', '') as string,
+        process.env.SECRET as string
+    ) as User
+    
+    req.__user = decoded
+    next()
+}
+```
+
+From `src/middlewares/isAuthed.ts:18-28`
+
+### Rate Limiting
+
+API-wide rate limiting prevents abuse:
+
+```typescript
+app.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+})
+```
+
+From `src/app.ts:33-36`
+
+### Security Headers
+
+Helmet provides security headers:
+
+```typescript
+app.register(helmet, {
+    contentSecurityPolicy: false,
+    referrerPolicy: false,
+})
+```
+
+From `src/app.ts:23-26`
