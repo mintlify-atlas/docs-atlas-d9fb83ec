@@ -1,0 +1,183 @@
+{
+  "projectType": "saas",
+  "projectName": "DevEfficiency",
+  "projectDescription": "A comprehensive service request management system designed for developers, featuring client management, service orders, billing, and financial tracking.",
+  "theme": "linden",
+  "primaryColor": "#2563eb",
+  "lightColor": "#60a5fa",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "introduction",
+              "features",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Getting Started",
+            "pages": [
+              "getting-started/installation",
+              "getting-started/configuration",
+              "getting-started/deployment"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/service-orders",
+              "features/protocols",
+              "features/billing",
+              "features/client-management",
+              "features/project-management",
+              "features/financial-management"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
+              "auth/overview",
+              "auth/jwt-tokens",
+              "auth/user-management"
+            ]
+          },
+          {
+            "group": "Integration",
+            "pages": [
+              "integration/email-notifications",
+              "integration/pdf-generation",
+              "integration/database"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/login",
+              "api/auth/refresh",
+              "api/auth/verify"
+            ]
+          },
+          {
+            "group": "Clients",
+            "pages": [
+              "api/clients/list",
+              "api/clients/get",
+              "api/clients/create",
+              "api/clients/update"
+            ]
+          },
+          {
+            "group": "Service Orders",
+            "pages": [
+              "api/service-orders/list",
+              "api/service-orders/get",
+              "api/service-orders/create",
+              "api/service-orders/update",
+              "api/service-orders/pdf"
+            ]
+          },
+          {
+            "group": "Protocols",
+            "pages": [
+              "api/protocols/list",
+              "api/protocols/get",
+              "api/protocols/update",
+              "api/protocols/pdf"
+            ]
+          },
+          {
+            "group": "Billing",
+            "pages": [
+              "api/billing/list",
+              "api/billing/get",
+              "api/billing/create",
+              "api/billing/update",
+              "api/billing/delete",
+              "api/billing/pdf"
+            ]
+          },
+          {
+            "group": "Projects",
+            "pages": [
+              "api/projects/list",
+              "api/projects/get",
+              "api/projects/create",
+              "api/projects/update"
+            ]
+          },
+          {
+            "group": "Financial Management",
+            "pages": [
+              "api/financial/bank-accounts",
+              "api/financial/payables",
+              "api/financial/cost-centers",
+              "api/financial/bank-transfers",
+              "api/financial/reports"
+            ]
+          },
+          {
+            "group": "Products & Services",
+            "pages": [
+              "api/products/list",
+              "api/products/get",
+              "api/products/create",
+              "api/products/update"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Service order management with workflow tracking",
+    "Protocol and billing system",
+    "Client and contact management",
+    "Project and subproject organization",
+    "Financial tracking (payables, bank accounts, cost centers)",
+    "PDF generation for documents",
+    "Email notifications",
+    "JWT-based authentication",
+    "Financial reporting (DRE, expense reports)",
+    "Subscription management",
+    "Multi-status workflow for service orders",
+    "Rate limiting and security headers"
+  ],
+  "publicApiSurface": [
+    "POST /api/auth - User authentication",
+    "POST /api/auth/refresh - Refresh JWT token",
+    "GET /api/auth/verify - Verify token",
+    "GET /api/clients - List clients",
+    "POST /api/clients - Create client",
+    "GET /api/os - List service orders",
+    "POST /api/os - Create service order",
+    "GET /api/os/:id/pdf - Generate service order PDF",
+    "GET /api/protocols - List protocols",
+    "GET /api/protocols/pdf - Generate protocol PDF",
+    "GET /api/billings - List billings",
+    "POST /api/billings - Create billing",
+    "GET /api/billings/:id/pdf - Generate billing PDF",
+    "GET /api/projects - List projects",
+    "POST /api/projects - Create project",
+    "GET /api/products - List products",
+    "POST /api/products - Create product",
+    "GET /api/bank-accounts - List bank accounts",
+    "GET /api/payables - List payables",
+    "GET /api/cost-centers - List cost centers",
+    "GET /api/financial-history - Financial history report",
+    "GET /api/dre-report - DRE report",
+    "GET /api/expense-report - Expense report",
+    "GET /api/suppliers - List suppliers",
+    "GET /api/subscriptions - List subscriptions",
+    "GET /api/servers - List servers"
+  ]
+}
